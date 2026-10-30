@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+    <meta name="theme-color" content="#13281A" />
+    <meta name="color-scheme" content="light dark" />
+    <!-- Applied synchronously, before any CSS or JS loads, so there is
+         never a flash of the wrong theme (or the wrong status-bar
+         colour) on first paint. Mirrors the logic in
+         src/hooks/useTheme.ts — keep both in sync if this ever changes.
+         Has to come AFTER the theme-color meta tag above, or
+         querySelector below finds nothing yet to update. -->
+    <script>
+      (function () {
+        try {
+          var pref = localStorage.getItem("growell_theme");
+          var dark = pref === "dark" || (pref !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", dark);
+          document.querySelector('meta[name="theme-color"]').setAttribute("content", dark ? "#121212" : "#13281A");
+        } catch (e) {}
+      })();
+    </script>
+    <!-- Open the connection to the database and the weather service early,
+         so the first request does not wait on the handshake. -->
+    <link rel="preconnect" href="%VITE_SUPABASE_URL%" crossorigin />
+    <link rel="dns-prefetch" href="https://api.open-meteo.com" />
+    <link rel="dns-prefetch" href="https://server.arcgisonline.com" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Public+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Growell</title>
+  </head>
+  <body class="bg-parchment font-body text-ink antialiased dark:bg-night-950 dark:text-parchment">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

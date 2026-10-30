@@ -1,0 +1,467 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Mobile-native baseline. None of this reproduces in Chrome's device
+   emulation — it's real-hardware behavior (iOS Safari / Android Chrome
+   specifically), which is why it's easy to ship a web app that works
+   fine at a desk and feels like "a website" the moment it's on a phone. */
+html {
+  /* The gray/blue flash iOS and Android paint on any tap — the single
+     loudest "this is a website" tell there is. Every tappable element
+     gets its own :active state below instead. */
+  -webkit-tap-highlight-color: transparent;
+  /* No font inflation when the phone rotates to landscape. */
+  -webkit-text-size-adjust: 100%;
+  /* Without this, overscrolling at the top of a long page can trigger
+     the browser's pull-to-refresh — jarring on a dashboard with no
+     actual refresh gesture built for it. */
+  overscroll-behavior: none;
+}
+
+/* iOS Safari zooms the whole page on focusing any input under 16px, and
+   doesn't zoom back out on blur. The fix is the font size, never
+   maximum-scale=1 (that's an accessibility failure, not a fix). */
+input,
+textarea,
+select {
+  font-size: 16px;
+}
+
+button,
+a,
+[role="button"] {
+  /* Skips the ~300ms double-tap-zoom wait, so taps register instantly. */
+  touch-action: manipulation;
+  /* A long press on a native control never selects its label or pops a
+     share/copy callout — only body content should be selectable. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Native buttons respond the instant a finger lands, not when it lifts.
+   :active fires on press for every input type — touch, mouse, pen —
+   unlike a hover-based scheme, which touch can't produce at all. */
+button,
+[role="button"],
+.tappable {
+  transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+button:active,
+[role="button"]:active,
+.tappable:active {
+  transform: scale(0.97);
+}
+@media (prefers-reduced-motion: reduce) {
+  button,
+  [role="button"],
+  .tappable {
+    transition: none;
+  }
+  button:active,
+  [role="button"]:active,
+  .tappable:active {
+    transform: none;
+  }
+}
+
+/* Consistent branded keyboard-focus ring. :focus-visible only fires for
+   keyboard/switch-control navigation, never mouse clicks — so this adds
+   visible focus everywhere without touching hover/click behavior.
+   Inputs that already set their own focus:ring keep that instead, since
+   they explicitly suppress the outline via focus:outline-none. */
+/* Text boxes are left out: they draw their own focus ring, and this rule
+   used to square off their rounded corners while focused. No corner
+   radius is set here either, so the outline follows each element's own
+   shape. */
+:focus-visible:not(input):not(textarea):not(select) {
+  outline: 2px solid #15884a; /* growth-600 */
+  outline-offset: 2px;
+}
+
+/* One orchestrated animation for the splash screen's brand mark:
+   the orbit ring draws in, the satellite travels along it and descends,
+   then the leaf fades/scales in as it "arrives". Everything else in the
+   product is static — this is the single deliberate motion moment. */
+@keyframes orbit-draw {
+  from { stroke-dashoffset: 220; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes descent-draw {
+  from { stroke-dashoffset: 32; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes satellite-travel {
+  0% { offset-distance: 0%; opacity: 1; }
+  55% { offset-distance: 100%; opacity: 1; }
+  70% { opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes leaf-arrive {
+  0%, 60% { opacity: 0; transform: scale(0.7); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.brandmark-orbit {
+  stroke-dasharray: 220;
+  animation: orbit-draw 900ms ease-out forwards;
+}
+.brandmark-descent {
+  stroke-dasharray: 32;
+  animation: descent-draw 400ms ease-out 700ms backwards;
+}
+.brandmark-satellite {
+  offset-path: path("M 78 30 A 30 14 0 1 1 18 30 A 30 14 0 1 1 78 30 L 48 62");
+  offset-rotate: 0deg;
+  animation: satellite-travel 1400ms ease-in-out forwards;
+}
+.brandmark-leaf {
+  transform-origin: 48px 79px;
+  animation: leaf-arrive 500ms ease-out 1100ms backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brandmark-orbit, .brandmark-descent, .brandmark-satellite, .brandmark-leaf {
+    animation: none !important;
+    stroke-dashoffset: 0 !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .brandmark-satellite { opacity: 0 !important; }
+}
+
+/* Slow, organic drift for the auth-screen background blobs — three
+   different paths/durations/delays so they never look synced, like a
+   fluid mesh gradient rather than a mechanical loop. */
+@keyframes blob-drift-a {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(50px, 70px) scale(1.12); }
+  66%      { transform: translate(-35px, 45px) scale(0.94); }
+}
+@keyframes blob-drift-b {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(-55px, -35px) scale(1.08); }
+  66%      { transform: translate(35px, -55px) scale(0.92); }
+}
+@keyframes blob-drift-c {
+  0%, 100% { transform: translate(-50%, 0) scale(1); }
+  50%      { transform: translate(calc(-50% + 65px), -50px) scale(1.18); }
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-blob-a, .auth-blob-b, .auth-blob-c { animation: none !important; }
+}
+
+/* Landing page entrance/reveal animation — used both for the hero's
+   immediate on-load stagger and for scroll-triggered reveals (see
+   Reveal.tsx, which adds this class via IntersectionObserver). */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up {
+  animation: fade-up 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up { animation: none !important; opacity: 1 !important; transform: none !important; }
+}
+
+/* Season scrubber — a restyled native range input, since it gives the
+   most reliable drag/keyboard/touch behavior for free. Track and thumb
+   styled per-browser (no single shorthand covers both engines). */
+.season-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(to right, #22A159 var(--slider-fill, 50%), #E6E9E7 var(--slider-fill, 50%));
+  outline: none;
+  cursor: pointer;
+}
+.season-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid #15884A;
+  box-shadow: 0 2px 6px rgba(22, 36, 28, 0.3);
+  cursor: grab;
+}
+.season-slider::-webkit-slider-thumb:active { cursor: grabbing; }
+.season-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid #15884A;
+  box-shadow: 0 2px 6px rgba(22, 36, 28, 0.3);
+  cursor: grab;
+}
+.season-slider::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+/* Leaflet's default zoom control and Geoman's draw/edit toolbar are
+   plain white squares with hard borders — restyle the chrome (radius,
+   shadow, hover tint) without touching width/height/icon backgrounds,
+   since the icons are pixel-positioned and break if those change. */
+.leaflet-bar,
+.leaflet-pm-toolbar {
+  border: none !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+  box-shadow: 0 4px 14px rgba(22, 36, 28, 0.18) !important;
+}
+.leaflet-bar a,
+.leaflet-pm-toolbar a,
+.leaflet-buttons-control-button {
+  background-color: #fff !important;
+  border-bottom: 1px solid rgba(22, 36, 28, 0.08) !important;
+}
+.leaflet-bar a:last-child,
+.leaflet-pm-toolbar a:last-child {
+  border-bottom: none !important;
+}
+.leaflet-bar a:hover,
+.leaflet-pm-toolbar a:hover,
+.leaflet-buttons-control-button:hover {
+  background-color: #f1f8f3 !important; /* growth-50 */
+}
+.leaflet-buttons-control-button.active,
+.leaflet-pm-toolbar a.active {
+  background-color: #dceee1 !important; /* growth-100 — shows which tool is active */
+}
+.leaflet-touch .leaflet-bar,
+.leaflet-touch .leaflet-pm-toolbar {
+  border: none !important;
+}
+/* Space the zoom control and the draw/edit toolbars apart a bit more
+   than Leaflet's cramped default. */
+.leaflet-top.leaflet-left .leaflet-control {
+  margin-top: 12px;
+  margin-left: 12px;
+}
+
+/* Chrome (and other Chromium browsers) force their own background tint
+   and text colour onto an autofilled input — filling in a saved login
+   bypasses the page's own CSS entirely, which is why it only looks wrong
+   after the browser fills it in, never while typing normally. Plain
+   background-color doesn't win against this; the oversized inset
+   box-shadow is the standard, actually-reliable override. The long
+   transition delay stops Chrome's own yellow/blue flash from showing for
+   an instant before this rule takes over. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: #16241C; /* ink */
+  caret-color: #16241C;
+  -webkit-box-shadow: 0 0 0 1000px #FFFFFF inset; /* white */
+  box-shadow: 0 0 0 1000px #FFFFFF inset;
+  transition: background-color 9999s ease-in-out 0s, color 9999s ease-in-out 0s;
+}
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover,
+.dark input:-webkit-autofill:focus,
+.dark input:-webkit-autofill:active {
+  -webkit-text-fill-color: #F2F4F3; /* parchment */
+  caret-color: #F2F4F3;
+  -webkit-box-shadow: 0 0 0 1000px #121212 inset; /* night-950 */
+  box-shadow: 0 0 0 1000px #121212 inset;
+}
+
+/* The login and sign-up card is always white, even in dark mode, so a
+   saved login filled in there must stay light too. */
+.dark .auth-card input:-webkit-autofill,
+.dark .auth-card input:-webkit-autofill:hover,
+.dark .auth-card input:-webkit-autofill:focus,
+.dark .auth-card input:-webkit-autofill:active {
+  -webkit-text-fill-color: #16241C;
+  caret-color: #16241C;
+  -webkit-box-shadow: 0 0 0 1000px #FFFFFF inset;
+  box-shadow: 0 0 0 1000px #FFFFFF inset;
+}
+
+/* Firefox (and newer Chromium) also support the unprefixed standard
+   pseudo-class, which DOES respect plain background-color/color — no
+   box-shadow trick needed here, but it costs nothing to set both. */
+input:autofill {
+  background-color: #FFFFFF;
+  color: #16241C;
+}
+.dark input:autofill {
+  background-color: #121212;
+  color: #F2F4F3;
+}
+.dark .auth-card input:autofill {
+  background-color: #FFFFFF;
+  color: #16241C;
+}
+
+/* Season timelapse. Pictures cross-fade; the photo is shown in its real
+   colours, nothing is tinted. */
+.timelapse-frame {
+  transition: opacity 450ms ease;
+}
+.timelapse-flagged {
+  animation: timelapse-pulse 1.4s ease-in-out infinite;
+}
+@keyframes timelapse-pulse {
+  0%, 100% { stroke-opacity: 1; }
+  50% { stroke-opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .timelapse-frame { transition: none; }
+  .timelapse-flagged { animation: none; }
+}
+.season-slider:disabled { cursor: default; opacity: 0.5; }
+.timelapse-outline {
+  transition: fill 600ms ease, fill-opacity 400ms ease, stroke 400ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .timelapse-outline { transition: none; }
+}
+
+/* Dark mode tints. The light pastel fills (alert banners, notices, badges,
+   icon tiles) read as harsh bright strips on dark surfaces. In dark mode
+   they become a low-opacity wash of the same hue with a lighter text
+   tone, all above 7:1 on the dark card colour. The login and sign-up card
+   stays white in every theme, so it is left alone. */
+.dark .bg-laterite-50:not(.auth-card *),
+.dark .bg-laterite-100:not(.auth-card *) { background-color: rgba(193, 89, 45, 0.18); }
+.dark .bg-sky-100:not(.auth-card *) { background-color: rgba(60, 110, 143, 0.26); }
+.dark .bg-growth-50:not(.auth-card *),
+.dark .bg-growth-100:not(.auth-card *) { background-color: rgba(34, 161, 89, 0.18); }
+.dark .text-laterite-700:not(.auth-card *) { color: #F2A982; }
+.dark .text-sky-700:not(.auth-card *) { color: #A9CBE0; }
+.dark .text-growth-700:not(.auth-card *) { color: #7FD8A0; }
+
+/* New-alert toast: slides up a little and fades in. */
+.toast-in {
+  animation: toast-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast-in { animation: none; }
+}
+
+/* ==========================================================================
+   Motion system. Durations: 120ms press, 180ms pop, 240ms panel, 600ms data.
+   Only transform and opacity move. Every class has a reduced-motion
+   fallback at the bottom of this block.
+   ========================================================================== */
+:root {
+  --ease-enter: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+}
+
+@keyframes m-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes m-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes m-drop { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes m-scale { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes m-slide-l { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+@keyframes m-slide-r { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: none; } }
+@keyframes m-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(4px); } }
+@keyframes m-spin { to { transform: rotate(360deg); } }
+@keyframes m-shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+@keyframes m-progress { from { transform: translateX(-100%) scaleX(0.4); } to { transform: translateX(250%) scaleX(0.4); } }
+
+/* Page content entering (route change, Settings section, field switch). */
+.m-page { animation: m-rise 240ms var(--ease-enter) both; }
+/* Something appearing in place (cards, notices, answered alerts). */
+.m-in { animation: m-rise 180ms var(--ease-enter) both; }
+/* Dropdowns, date picker, panels: drop from their trigger. */
+.m-drop { animation: m-drop 180ms var(--ease-enter) both; }
+/* Modal dialog and its backdrop. */
+.m-dialog { animation: m-scale 240ms var(--ease-enter) both; }
+.m-backdrop { animation: m-fade 180ms var(--ease-enter) both; }
+.m-dialog-out { animation: m-scale 160ms var(--ease-exit) reverse both; }
+.m-backdrop-out { animation: m-fade 160ms var(--ease-exit) reverse both; }
+/* Leaving in place (dismissed toast, answered alert). */
+.m-out { animation: m-out 160ms var(--ease-exit) both; }
+/* Sign-up steps: forward slides in from the right, back from the left. */
+.m-step-fwd { animation: m-slide-l 240ms var(--ease-enter) both; }
+.m-step-back { animation: m-slide-r 240ms var(--ease-enter) both; }
+
+/* Lists on first load: children rise one after another, 30ms apart,
+   capped at 8 so long lists don't take ages. */
+.m-stagger > * { animation: m-rise 240ms var(--ease-enter) both; }
+.m-stagger > *:nth-child(2) { animation-delay: 30ms; }
+.m-stagger > *:nth-child(3) { animation-delay: 60ms; }
+.m-stagger > *:nth-child(4) { animation-delay: 90ms; }
+.m-stagger > *:nth-child(5) { animation-delay: 120ms; }
+.m-stagger > *:nth-child(6) { animation-delay: 150ms; }
+.m-stagger > *:nth-child(7) { animation-delay: 180ms; }
+.m-stagger > *:nth-child(n + 8) { animation-delay: 210ms; }
+
+/* Loading spinner (inside buttons). */
+.m-spin { animation: m-spin 700ms linear infinite; }
+
+/* Images fade in once loaded instead of popping in. */
+.m-img { opacity: 0; transition: opacity 240ms var(--ease-enter); }
+.m-img[data-loaded="true"] { opacity: 1; }
+
+/* Press feedback on every enabled button. Leaflet's own controls are links,
+   so maps are not affected. */
+button { transition-property: color, background-color, border-color, opacity, transform, box-shadow; transition-duration: 120ms; transition-timing-function: var(--ease-enter); }
+button:not(:disabled):active { transform: scale(0.98); }
+button:disabled { cursor: not-allowed; }
+
+/* Skeleton shimmer: a soft light sweep over the grey block. */
+.m-shimmer { position: relative; overflow: hidden; }
+.m-shimmer::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  animation: m-shimmer 1.4s ease-in-out infinite;
+}
+.dark .m-shimmer::after { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent); }
+
+/* Thin bar at the top of the screen while data refreshes in the background. */
+.m-progress { animation: m-progress 1.2s var(--ease-enter) infinite; transform-origin: left; }
+
+/* Theme switch: everything cross-fades its colours once, for 200ms only. */
+.theme-switching, .theme-switching *, .theme-switching *::before, .theme-switching *::after {
+  transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease, fill 200ms ease !important;
+}
+
+/* Dark mode elevation: a hairline light edge instead of a shadow. */
+.dark .shadow-e1 { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05); }
+.dark .shadow-e2 { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 12px 32px -8px rgba(0, 0, 0, 0.6); }
+.dark .shadow-e3 { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 56px -12px rgba(0, 0, 0, 0.75); }
+/* The login card stays white in dark mode, so it keeps its light shadow. */
+.dark .auth-card.shadow-e3 { box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.5); }
+
+/* Horizontal scroll rows (Settings tabs on phones): fade the edge as a hint. */
+.m-scroll-hint { -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
+@media (min-width: 768px) { .m-scroll-hint { -webkit-mask-image: none; mask-image: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .m-page, .m-in, .m-drop, .m-dialog, .m-step-fwd, .m-step-back, .m-stagger > * { animation: m-fade 120ms linear both !important; animation-delay: 0ms !important; }
+  .m-backdrop, .m-dialog-out, .m-backdrop-out, .m-out { animation-duration: 1ms !important; }
+  .m-shimmer::after, .m-progress { animation: none; }
+  .m-img { transition: none; }
+  button:not(:disabled):active { transform: none; }
+  .theme-switching, .theme-switching * { transition: none !important; }
+}
+
+/* Desktop app frame. The frame is pinned to the window, so the page
+   behind it must never scroll. Without this, scrolling the sidebar past
+   its end passed the scroll on to the page, which slid the whole app up
+   and showed an empty band underneath. */
+@media (min-width: 768px) {
+  html:has(.app-shell),
+  html:has(.app-shell) body {
+    overflow: hidden;
+    height: 100%;
+  }
+}
