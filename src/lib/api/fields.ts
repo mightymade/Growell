@@ -12,12 +12,20 @@ export async function fetchFields(): Promise<Field[]> {
   return rows.map((f) => ({ ...f, area_hectares: f.area_hectares === null ? null : Number(f.area_hectares) }));
 }
 
-/** RLS (`fields belong to the farmer`) is what actually stops this from
- *  touching anyone else's row — the .eq() here narrows the query, RLS is
- *  the real backstop that makes it safe even if the id were guessed. */
+const MISSING_FUNCTION = new Set(["PGRST202", "42883"]);
+
+/** Deletes a field for the farmer. The database keeps the row, marked
+ *  deleted, so the admin still sees what was deleted and when; the farmer
+ *  never sees it again. delete_field() checks ownership itself. */
 export async function deleteField(fieldId: string): Promise<void> {
-  const { error } = await supabase.from("fields").delete().eq("id", fieldId);
-  if (error) throw toFriendlyError(error, "Couldn't delete this field. Please try again.");
+  const { error } = await supabase.rpc("delete_field", { p_field_id: fieldId });
+  if (!error) return;
+  if (!MISSING_FUNCTION.has(error.code)) throw toFriendlyError(error, "Couldn't delete this field. Please try again.");
+
+  // Older database without patch_010: the old hard delete.
+  console.warn("delete_field is missing. Run supabase/patch_010_admin_and_audit.sql.");
+  const res = await supabase.from("fields").delete().eq("id", fieldId);
+  if (res.error) throw toFriendlyError(res.error, "Couldn't delete this field. Please try again.");
 }
 
 export async function updatePlantedDate(fieldId: string, plantedDate: string): Promise<void> {

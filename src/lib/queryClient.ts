@@ -40,7 +40,14 @@ export const persistOptions = {
     // Only successful data is saved. The temporary "history is loading"
     // flag is never saved, or it could get stuck after a reload.
     shouldDehydrateQuery: (q: { state: { status: string }; queryKey: readonly unknown[] }) =>
-      q.state.status === "success" && q.queryKey[0] !== "backfill" && q.queryKey[0] !== "frame",
+      q.state.status === "success" &&
+      q.queryKey[0] !== "backfill" &&
+      q.queryKey[0] !== "frame" &&
+      // Admin data covers every user. It is never written to the browser's
+      // storage, and the admin check is always asked fresh.
+      q.queryKey[0] !== "admin" &&
+      q.queryKey[0] !== "isAdmin" &&
+      q.queryKey[0] !== "terms",
   },
 };
 

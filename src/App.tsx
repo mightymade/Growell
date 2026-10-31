@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useSearchParams } from "react-router-dom";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabase";
 import { clearCache, claimCacheFor } from "./lib/queryClient";
@@ -25,6 +25,25 @@ function FieldsIndex() {
 const AlertsPage = lazy(() => import("./pages/AlertsPage"));
 const AddField = lazy(() => import("./pages/AddField"));
 const Account = lazy(() => import("./pages/Account"));
+// The admin section is its own download: farmers never load it.
+const AdminApp = lazy(() => import("./admin/AdminApp"));
+const PrivacyPolicy = lazy(() => import("./pages/legal/PrivacyPolicy"));
+const AccountDeleted = lazy(() => import("./pages/AccountDeleted"));
+const TermsOfUse = lazy(() => import("./pages/legal/TermsOfUse"));
+
+/** Signed out and asked for an admin page: log in first, then come back. */
+function LoginFirst() {
+  const { pathname, search } = useLocation();
+  return <Navigate to={`/login?next=${encodeURIComponent(pathname + search)}`} replace />;
+}
+
+/** Just signed in: go where the person was heading, if it is a page of this app. */
+function AfterLogin() {
+  const [params] = useSearchParams();
+  const next = params.get("next") ?? "";
+  const safe = next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\");
+  return <Navigate to={safe ? next : "/"} replace />;
+}
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -57,6 +76,9 @@ export default function App() {
               {/* AddField is deliberately outside AppLayout: a full-screen
                   focused task (map + form), no sidebar or tab bar chrome. */}
               <Route path="/fields/new" element={<AddField />} />
+              <Route path="/admin/*" element={<AdminApp />} />
+              <Route path="/privacy" element={<PrivacyPolicy />} />
+              <Route path="/terms" element={<TermsOfUse />} />
 
               <Route element={<AppLayout />}>
                 <Route path="/" element={<Navigate to="/home" replace />} />
@@ -68,7 +90,7 @@ export default function App() {
                 <Route path="/settings/:section" element={<Account />} />
               </Route>
 
-              <Route path="/login" element={<Navigate to="/" replace />} />
+              <Route path="/login" element={<AfterLogin />} />
               <Route path="/signup" element={<Navigate to="/" replace />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </>
@@ -77,6 +99,10 @@ export default function App() {
               <Route path="/" element={<Landing />} />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
+              <Route path="/admin/*" element={<LoginFirst />} />
+              <Route path="/account-deleted" element={<AccountDeleted />} />
+              <Route path="/privacy" element={<PrivacyPolicy />} />
+              <Route path="/terms" element={<TermsOfUse />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </>
           )}

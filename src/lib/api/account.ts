@@ -64,3 +64,25 @@ export async function changeProfilePhoto(file: File, farmerId: string): Promise<
   if (error) throw toFriendlyError(error, "Photo uploaded, but couldn't be saved to your profile.");
   return avatarUrl;
 }
+
+export type DeleteResult = { emailed: boolean; email: string };
+
+/**
+ * Deletes the signed-in farmer's account and all their data, straight
+ * away, after checking their password (see supabase/functions/delete-account).
+ */
+export async function deleteMyAccount(password: string): Promise<DeleteResult> {
+  const { data, error } = await supabase.functions.invoke("delete-account", { body: { password } });
+  if (error) {
+    // The function explains what went wrong in its reply.
+    let message = "Couldn't delete your account. Nothing was deleted. Please try again.";
+    try {
+      const body = await (error as { context?: Response }).context?.json();
+      if (body?.error) message = body.error;
+    } catch {
+      // keep the general message
+    }
+    throw new Error(message);
+  }
+  return { emailed: !!data?.emailed, email: String(data?.email ?? "") };
+}

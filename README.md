@@ -119,7 +119,13 @@ growell/
 In the Supabase SQL Editor, run these files in this order:
 
 1. `supabase/schema.sql`
-2. `supabase/patch_001_anomaly_update_policy.sql` through `supabase/patch_009_alert_system.sql`, one at a time, in number order
+2. `supabase/patch_001_anomaly_update_policy.sql` through `supabase/patch_011_legal_security_accuracy.sql`, one at a time, in number order
+
+To make an account admin (it then sees the admin section at `/admin`), run:
+
+```sql
+insert into public.admins (user_id) select id from auth.users where email = 'YOUR_EMAIL' on conflict do nothing;
+```
 
 ### 2. Add the satellite keys
 
@@ -129,6 +135,7 @@ In Supabase, go to **Edge Functions**, then **Secrets**, and add:
 |---|---|
 | `SENTINELHUB_CLIENT_ID` | Copernicus dashboard, OAuth clients |
 | `SENTINELHUB_CLIENT_SECRET` | Copernicus dashboard, OAuth clients |
+| `PIPELINE_KEY` | A long random key you make (see step 3). Only the daily schedule knows it, so nobody else can start the daily check. |
 
 `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are provided to Edge Functions by Supabase automatically.
 
@@ -141,9 +148,19 @@ npx supabase login
 npx supabase functions deploy daily-pipeline --no-verify-jwt --project-ref YOUR_PROJECT_REF
 npx supabase functions deploy backfill-field --no-verify-jwt --project-ref YOUR_PROJECT_REF
 npx supabase functions deploy field-frame --no-verify-jwt --project-ref YOUR_PROJECT_REF
+npx supabase functions deploy delete-account --no-verify-jwt --project-ref YOUR_PROJECT_REF
 ```
 
-Then schedule `daily-pipeline` to run once a day (for example `0 3 * * *`, which is 06:00 in Uganda) from the Supabase dashboard. Without this schedule, fields are only checked when someone logs in.
+For the "account deleted" confirmation email, add two secrets: `GMAIL_USER` (the Gmail address that sends it) and `GMAIL_APP_PASSWORD` (a Google app password for it, made under Google Account, Security, 2-Step Verification, App passwords). Without them, accounts are still deleted and the confirmation shows on screen.
+
+Then protect and schedule the daily check:
+
+1. Make a key: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+2. Give it to the function: `npx supabase secrets set PIPELINE_KEY=THE_KEY --project-ref YOUR_PROJECT_REF`
+3. In **Database**, then **Extensions**, turn on `pg_cron` and `pg_net`.
+4. Follow section 4 at the bottom of `supabase/patch_011_legal_security_accuracy.sql`: it stores the key in the encrypted Vault and schedules the check every day at 03:00 UTC (06:00 in Uganda).
+
+`daily-pipeline` refuses any call without the key. `backfill-field` and `field-frame` only work for the signed-in owner of the field.
 
 ### 4. Run the app locally
 
@@ -170,7 +187,20 @@ The app is a static Vite build hosted on Vercel, which rebuilds the site on ever
 2. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as environment variables.
 3. In Supabase, under **Authentication**, then **URL Configuration**, set the Site URL to the live address and add `https://YOUR-SITE.vercel.app/**` to the Redirect URLs, so confirmation and password reset emails link to the live site.
 
+On Vercel, link previews (the `og:image` tag) automatically use the live address. To use a custom domain instead, add `VITE_SITE_URL=https://your-domain` as an environment variable.
+
 The anon key is meant to be public. Row level security makes sure each farmer can only read and change their own data. The service role key is only used inside Edge Functions and must never be added to the website or to the repository.
+
+## Privacy and legal
+
+Growell follows Uganda's Data Protection and Privacy Act, 2019 (Cap. 97):
+
+- A Privacy Policy (`/privacy`) and Terms of Use (`/terms`), in plain English, linked from the landing page, login and sign-up.
+- Consent at sign-up, recorded with the policy version and time. Existing accounts are asked once. Changing `TERMS_VERSION` in `src/lib/legal.ts` asks everyone again.
+- Farmers can download all their data from Settings, and delete their account there. Deletion is immediate, removes stored files too, and emails a confirmation (`delete-account` function).
+- When an account is deleted, its name, email and typed answers are removed from the activity history.
+
+Before a real public launch, check whether Growell must register with the Personal Data Protection Office (pdpo.go.ug), and have the policy reviewed.
 
 ## Limitations
 

@@ -18,6 +18,12 @@ export default {
       "5xl": ["48px", { lineHeight: "56px" }],
     },
     extend: {
+      // "tall": a computer screen with enough height for the admin pages to
+      // fit one screen without scrolling. Shorter or narrower screens fall
+      // back to normal page scrolling instead of squashing cards.
+      screens: {
+        tall: { raw: "(min-width: 1024px) and (min-height: 700px)" },
+      },
       // Three elevation levels, and only these. In dark mode depth comes
       // from a hairline light border instead of shadow (see index.css).
       boxShadow: {

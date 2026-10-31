@@ -1,17 +1,22 @@
+import { signOutAndLog } from "../lib/api/audit";
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useIsPhone } from "../hooks/useIsPhone";
 import Modal from "../components/Modal";
-import { supabase } from "../lib/supabase";
 import { useFarmerProfile } from "../hooks/useFarmerProfile";
-import { updateProfile, requestEmailChange, changePassword, setAccountActive, changeProfilePhoto } from "../lib/api/account";
+import { updateProfile, requestEmailChange, changePassword, setAccountActive, changeProfilePhoto, deleteMyAccount } from "../lib/api/account";
+import { supabase } from "../lib/supabase";
 import { validateAvatarFile } from "../lib/avatar";
 import { isPasswordValid } from "../lib/passwordPolicy";
 import { checkAndStartCooldown } from "../lib/rateLimit";
 import Avatar from "../components/Avatar";
 import PasswordRequirements from "../components/PasswordRequirements";
-import { LogoutIcon, CameraIcon, UserIcon, LockIcon, SunIcon, ChevronRightIcon } from "../components/icons";
+import { LogoutIcon, CameraIcon, UserIcon, LockIcon, SunIcon, ChevronRightIcon, ShieldIcon } from "../components/icons";
+import { useIsAdmin } from "../hooks/useIsAdmin";
+import { downloadMyData } from "../lib/api/export";
+import { clearCache } from "../lib/queryClient";
+import { DELETED_KEY } from "../lib/legal";
 import { SettingsSkeleton } from "../components/Skeleton";
 import ThemeToggle from "../components/ThemeToggle";
 import { BusyLabel } from "../components/Busy";
@@ -39,6 +44,7 @@ export default function Account() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const isPhone = useIsPhone();
+  const { isAdmin } = useIsAdmin();
   const fromRoute = SECTIONS.find((x) => x.id === useParams().section)?.id;
   const fromQuery = SECTIONS.find((x) => x.id === params.get("section"))?.id;
   const section: Section | null = isPhone ? fromRoute ?? null : fromRoute ?? fromQuery ?? "profile";
@@ -85,7 +91,7 @@ export default function Account() {
 
   async function handleSignOut() {
     setSignOutError(null);
-    const { error } = await supabase.auth.signOut();
+    const { error } = await signOutAndLog("button");
     if (error) setSignOutError("Couldn't sign out. Please check your connection and try again.");
   }
 
@@ -176,7 +182,7 @@ export default function Account() {
     setDeactivateError(null);
     try {
       await setAccountActive(profile.id, false);
-      await supabase.auth.signOut();
+      await signOutAndLog("deactivated");
     } catch (err) {
       setDeactivateError(err instanceof Error ? err.message : "Couldn't deactivate your account. Please try again.");
       setDeactivating(false);
@@ -223,6 +229,20 @@ export default function Account() {
               </button>
             ))}
           </nav>
+          {isAdmin && (
+            <button
+              onClick={() => navigate("/admin")}
+              className="flex h-14 w-full items-center gap-3 rounded-xl bg-white px-4 text-left text-base text-ink shadow-e1 transition-colors active:bg-parchment dark:bg-night-900 dark:text-parchment dark:active:bg-white/5"
+            >
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-canopy-900 text-white" aria-hidden>
+                <ShieldIcon size={16} />
+              </span>
+              <span className="flex-1">Admin</span>
+              <span className="text-ink/40 dark:text-parchment/40" aria-hidden>
+                <ChevronRightIcon />
+              </span>
+            </button>
+          )}
         </div>
       )}
 
@@ -426,7 +446,7 @@ export default function Account() {
 
           {section === "account" && (
             <div>
-              <PanelHeading title="Account" note="Sign out, or pause your account." />
+              <PanelHeading title="Account" note="Sign out, get a copy of your data, or close your account." />
 
               <div className="flex flex-wrap items-center justify-between gap-4 border-b border-canopy-900/5 pb-6 dark:border-white/5">
                 <div>
@@ -443,12 +463,15 @@ export default function Account() {
                 {signOutError && <p role="alert" className="w-full text-xs text-laterite-700">{signOutError}</p>}
               </div>
 
+              <YourData email={profile.email} />
+
               <div className="pt-6">
                 <p className="text-sm font-medium text-ink dark:text-parchment">Deactivate account</p>
                 {!confirmingDeactivate || isPhone ? (
                   <>
                     <p className="mt-1 max-w-lg text-sm text-ink/65 dark:text-parchment/65">
-                      Hides your fields and data until you log in again and reactivate. Nothing is deleted.
+                      Hides your fields and data until you log in again and reactivate. Nothing is deleted. To delete your
+                      account, see "Your data" above.
                     </p>
                     <button
                       onClick={() => setConfirmingDeactivate(true)}
@@ -561,5 +584,170 @@ function Notice({ tone, children }: { tone: "error" | "info"; children: ReactNod
     >
       {children}
     </p>
+  );
+}
+
+/** Right of access and deletion (Data Protection and Privacy Act, s.24 and s.16). */
+function YourData({ email }: { email: string }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const btn =
+    "inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-canopy-900/12 px-4 text-base font-medium text-ink transition-colors hover:bg-parchment active:bg-parchment disabled:opacity-50 dark:border-white/15 dark:text-parchment dark:hover:bg-white/5 md:h-10 md:w-auto md:text-sm";
+
+  return (
+    <div className="space-y-6 border-b border-canopy-900/5 py-6 dark:border-white/5">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="max-w-lg">
+          <p className="text-sm font-medium text-ink dark:text-parchment">Download your data</p>
+          <p className="mt-1 text-sm text-ink/65 dark:text-parchment/65">
+            A file with your profile, fields, satellite readings, weather, alerts and answers.
+          </p>
+        </div>
+        <button
+          type="button"
+          className={btn}
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            setError(null);
+            setDone(false);
+            try {
+              await downloadMyData();
+              setDone(true);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Couldn't prepare your data. Please try again.");
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <BusyLabel busy={busy} label="Download my data" busyLabel="Preparing…" />
+        </button>
+        {error && <p role="alert" className="w-full text-xs text-laterite-700">{error}</p>}
+        {done && <p role="status" className="w-full text-xs text-growth-700">Your download has started.</p>}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="max-w-lg">
+          <p className="text-sm font-medium text-ink dark:text-parchment">Delete your account</p>
+          <p className="mt-1 text-sm text-ink/65 dark:text-parchment/65">
+            Deletes your account and all your data straight away, and emails you a confirmation. This can't be undone.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setDeleting(true)}
+          className="inline-flex h-12 w-full items-center justify-center rounded-lg border border-laterite-700/25 px-4 text-base font-medium text-laterite-700 transition-colors hover:bg-laterite-50 active:bg-laterite-50 md:h-10 md:w-auto md:text-sm"
+        >
+          Delete my account
+        </button>
+      </div>
+      <DeleteAccountDialog open={deleting} email={email} onClose={() => setDeleting(false)} />
+      <p className="text-sm text-ink/65 dark:text-parchment/65">
+        How we handle your data:{" "}
+        <Link to="/privacy" className="font-medium text-growth-700 hover:underline dark:text-growth-500">Privacy Policy</Link>
+        {" · "}
+        <Link to="/terms" className="font-medium text-growth-700 hover:underline dark:text-growth-500">Terms of Use</Link>
+      </p>
+    </div>
+  );
+}
+
+/** Asks for the password, then deletes the account and everything in it. */
+function DeleteAccountDialog({ open, email, onClose }: { open: boolean; email: string; onClose: () => void }) {
+  const navigate = useNavigate();
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setPassword("");
+      setError(null);
+    }
+  }, [open]);
+
+  async function confirm(e: React.FormEvent) {
+    e.preventDefault();
+    if (!password) {
+      setError("Enter your password to confirm.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await deleteMyAccount(password);
+      try {
+        sessionStorage.setItem(DELETED_KEY, JSON.stringify({ ...result, at: new Date().toISOString() }));
+      } catch {
+        // the page still shows a general confirmation
+      }
+      // The account no longer exists: forget the session on this device only.
+      clearCache();
+      await supabase.auth.signOut({ scope: "local" });
+      navigate("/account-deleted", { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't delete your account. Please try again.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={() => !busy && onClose()}
+      dismissible={!busy}
+      role="alertdialog"
+      size="md"
+      title="Delete your account?"
+      description="This deletes everything straight away and can't be undone."
+    >
+      <form onSubmit={confirm} className="pb-4" noValidate>
+        <ul className="list-disc space-y-1 pl-5 text-sm text-ink/80 dark:text-parchment/80">
+          <li>Your profile, photo and login ({email})</li>
+          <li>All your fields, satellite readings and weather records</li>
+          <li>All your alerts and your answers to them</li>
+          <li>Your name and email are removed from our activity record</li>
+        </ul>
+        <p className="mt-3 text-sm text-ink/70 dark:text-parchment/70">
+          Want a copy first? Close this and use "Download my data".
+        </p>
+        <label htmlFor="delete-password" className="mt-4 block text-sm font-medium text-ink dark:text-parchment">
+          Enter your password to confirm
+        </label>
+        <input
+          id="delete-password"
+          type="password"
+          autoComplete="current-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          data-autofocus
+          className="mt-2 h-12 w-full rounded-lg border border-canopy-900/12 bg-white px-3 text-base text-ink focus:border-laterite-600 focus:outline-none focus:ring-[3px] focus:ring-laterite-600/15 dark:border-white/15 dark:bg-night-950 dark:text-parchment md:h-10 md:text-sm"
+        />
+        {error && (
+          <p role="alert" className="mt-3 rounded-lg bg-laterite-50 px-3 py-2 text-sm text-laterite-700">
+            {error}
+          </p>
+        )}
+        <div className="mt-5 flex flex-col-reverse gap-2 md:flex-row md:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="h-12 rounded-lg border border-canopy-900/15 px-4 text-sm font-medium text-ink hover:bg-parchment disabled:opacity-50 dark:border-white/15 dark:text-parchment dark:hover:bg-white/5 md:h-10"
+          >
+            Keep my account
+          </button>
+          <button
+            type="submit"
+            disabled={busy}
+            className="h-12 rounded-lg bg-laterite-700 px-4 text-sm font-semibold text-white hover:bg-laterite-700/90 disabled:opacity-60 md:h-10"
+          >
+            <BusyLabel busy={busy} label="Delete my account" busyLabel="Deleting…" />
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }

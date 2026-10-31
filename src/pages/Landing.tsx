@@ -587,6 +587,8 @@ function Footer() {
     ["Features", "features", "section"],
     ["Log in", "/login", "route"],
     ["Get started", "/signup", "route"],
+    ["Privacy Policy", "/privacy", "route"],
+    ["Terms of Use", "/terms", "route"],
   ];
   const linkClass =
     "inline-flex h-11 items-center rounded-lg px-3 text-sm text-ink/70 transition-colors hover:text-ink dark:text-parchment/70 dark:hover:text-parchment md:h-9";

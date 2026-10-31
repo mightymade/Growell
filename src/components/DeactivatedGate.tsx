@@ -1,3 +1,4 @@
+import { signOutAndLog } from "../lib/api/audit";
 import { BusyLabel } from "./Busy";
 import { useState } from "react";
 import { supabase } from "../lib/supabase";
@@ -45,7 +46,7 @@ export default function DeactivatedGate({ onReactivated }: { onReactivated: () =
         </button>
         {error && <p role="alert" className="mt-3 text-xs text-laterite-700">{error}</p>}
         <button
-          onClick={() => supabase.auth.signOut()}
+          onClick={() => signOutAndLog("button")}
           className="mt-3 text-sm font-medium text-ink/70 dark:text-parchment/70 hover:text-ink dark:hover:text-parchment"
         >
           Sign out instead

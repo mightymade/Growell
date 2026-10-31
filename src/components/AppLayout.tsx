@@ -11,6 +11,7 @@ import BottomTabBar from "./BottomTabBar";
 import MobileTopBar from "./MobileTopBar";
 import DeactivatedGate from "./DeactivatedGate";
 import IdleWarningModal from "./IdleWarningModal";
+import ConsentGate from "./ConsentGate";
 import { PageSkeleton } from "./Skeleton";
 import { useIdleLogout } from "../hooks/useIdleLogout";
 
@@ -113,6 +114,7 @@ export default function AppLayout() {
       />
 
       {idle.warning && <IdleWarningModal secondsLeft={idle.secondsLeft} onStaySignedIn={idle.staySignedIn} />}
+      <ConsentGate />
     </div>
   );
 }

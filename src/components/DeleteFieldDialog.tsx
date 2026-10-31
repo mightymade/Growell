@@ -51,7 +51,7 @@ export default function DeleteFieldDialog({ field, onClose }: { field: Field | n
       onClose={() => !deleting && onClose()}
       role="alertdialog"
       title={`Delete ${field?.field_name ?? "this field"}?`}
-      description="This removes the field and all its satellite history, weather records and alerts. It can't be undone."
+      description="The field and its history will disappear from your account, and you can't undo this. A copy stays in Growell's records until your account is deleted, as our Privacy Policy explains."
       footer={
         <>
           <button

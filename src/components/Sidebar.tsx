@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
+import { signOutAndLog } from "../lib/api/audit";
 import { useFarmerProfile } from "../hooks/useFarmerProfile";
-import { HomeIcon, MapIcon, BellIcon, SettingsIcon, LogoutIcon, PlusIcon, TrashIcon } from "./icons";
+import { HomeIcon, MapIcon, BellIcon, SettingsIcon, LogoutIcon, PlusIcon, TrashIcon, ShieldIcon } from "./icons";
+import { useIsAdmin } from "../hooks/useIsAdmin";
 import DeleteFieldDialog from "./DeleteFieldDialog";
 import type { Field } from "../lib/types";
 import Avatar from "./Avatar";
@@ -34,6 +35,7 @@ export default function Sidebar({ openAlertCount = 0, fields = [] }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
   const { profile, loading: profileLoading } = useFarmerProfile();
+  const { isAdmin } = useIsAdmin();
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === "1");
 
   useEffect(() => {
@@ -199,6 +201,22 @@ export default function Sidebar({ openAlertCount = 0, fields = [] }: Props) {
           })}
         </nav>
 
+        {/* Only admins see this. Farmers never learn there is an admin area. */}
+        {isAdmin && (
+          <div className="px-3 pb-2">
+            <button
+              onClick={() => navigate("/admin")}
+              title={collapsed ? "Admin" : undefined}
+              className={`flex w-full items-center gap-3 rounded-lg py-3 pl-3 pr-3 text-sm font-medium text-ink/70 transition hover:bg-parchment hover:text-ink dark:text-parchment/70 dark:hover:bg-white/5 dark:hover:text-parchment ${
+                collapsed ? "md:justify-center md:px-0" : ""
+              }`}
+            >
+              <ShieldIcon size={18} />
+              <span className={`flex-1 text-left ${hideWhenCollapsed}`}>Admin</span>
+            </button>
+          </div>
+        )}
+
         {/* Identity footer — who's signed in, and a way to sign out.
             No longer doubles as "the settings link"; Settings is its
             own nav item above now. */}
@@ -210,7 +228,7 @@ export default function Sidebar({ openAlertCount = 0, fields = [] }: Props) {
             </span>
           </div>
           <button
-            onClick={() => supabase.auth.signOut()}
+            onClick={() => signOutAndLog("button")}
             title="Sign out"
             aria-label="Sign out"
             className={`shrink-0 rounded-lg p-2 text-ink/65 dark:text-parchment/65 hover:bg-parchment dark:hover:bg-white/5 hover:text-laterite-700 ${hideWhenCollapsed}`}

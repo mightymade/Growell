@@ -1,5 +1,5 @@
+import { signOutAndLog } from "../lib/api/audit";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { supabase } from "../lib/supabase";
 
 const IDLE_LIMIT_MS = 20 * 60 * 1000; // 20 minutes
 const WARNING_BEFORE_MS = 60 * 1000; // warn 60s before it happens
@@ -40,7 +40,7 @@ export function useIdleLogout() {
       }, 1000);
     }, IDLE_LIMIT_MS - WARNING_BEFORE_MS);
     logoutTimer.current = setTimeout(() => {
-      supabase.auth.signOut();
+      signOutAndLog("idle");
     }, IDLE_LIMIT_MS);
   }, []);
 
@@ -85,7 +85,7 @@ export function useIdleLogout() {
   }, [recordActivity]);
 
   useEffect(() => {
-    if (warning && secondsLeft === 0) supabase.auth.signOut();
+    if (warning && secondsLeft === 0) signOutAndLog("idle");
   }, [warning, secondsLeft]);
 
   return {

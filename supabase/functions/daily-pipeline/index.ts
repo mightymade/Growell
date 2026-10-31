@@ -4,8 +4,8 @@
 //   4. Cause Inference  5. Recommendation   6. Alert Generation
 //
 // Deploy:   supabase functions deploy daily-pipeline --no-verify-jwt
-// Schedule: supabase dashboard -> Edge Functions -> daily-pipeline -> Cron
-//           (e.g. "0 3 * * *" to run once a day at 03:00 UTC)
+// Schedule: pg_cron calls it daily with the secret key header
+//           x-pipeline-key (see supabase/patch_011_legal_security_accuracy.sql)
 // (--no-verify-jwt: this runs as a scheduled/service job, not on behalf
 // of a logged-in user, so there's no user JWT to verify.)
 //
@@ -73,13 +73,56 @@ function recommend(cause: string): string {
   }
 }
 
-Deno.serve(async () => {
+/**
+ * Records a pipeline event in the admin audit trail (patch_010). Never
+ * stops the run: if the patch isn't installed yet, it only logs a warning.
+ */
+async function logEvent(action: "pipeline.check_failed" | "pipeline.run_finished", details: Record<string, unknown>, field?: Field) {
+  const { error } = await supabase.rpc("log_system_event", {
+    p_action: action,
+    p_entity_id: field?.id ?? null,
+    p_entity_name: field?.field_name ?? null,
+    p_details: details,
+  });
+  if (error) console.warn(`could not record ${action}: ${error.message}`);
+}
+
+/** Constant-time compare, so the key can't be guessed one letter at a time. */
+function sameKey(a: string, b: string) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+Deno.serve(async (req) => {
+  // The function's address is public, so only a caller that knows the
+  // secret key may start a run: the daily schedule sends it (see
+  // patch_011). Anyone else is refused before any satellite quota is used.
+  const expected = Deno.env.get("PIPELINE_KEY") ?? "";
+  if (!expected) {
+    return new Response(JSON.stringify({ error: "PIPELINE_KEY is not set. See patch_011 setup steps." }), { status: 500 });
+  }
+  if (!sameKey(req.headers.get("x-pipeline-key") ?? "", expected)) {
+    return new Response(JSON.stringify({ error: "Not allowed" }), { status: 401 });
+  }
+  const started = Date.now();
+  // Deleted fields stay in the table for the admin's history (patch_010),
+  // but are never checked again.
   const { data: fields, error } = await supabase
     .from("fields")
-    .select("id, field_name, boundary_coords, crop_type, planted_date, area_hectares");
+    .select("id, field_name, boundary_coords, crop_type, planted_date, area_hectares")
+    .is("deleted_at", null);
   if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 
   const results: string[] = [];
+  let newImages = 0;
+  let failures = 0;
+  let alertsCreated = 0;
+  const failed = async (field: Field, reason: string) => {
+    failures++;
+    await logEvent("pipeline.check_failed", { reason: reason.slice(0, 300) }, field);
+  };
 
   for (const field of (fields ?? []) as Field[]) {
     if (!field.boundary_coords) {
@@ -129,6 +172,7 @@ Deno.serve(async () => {
       ndviResult = await fetchNdviTimeSeries(field.boundary_coords, from, to, field.area_hectares);
     } catch (err) {
       results.push(`${field.field_name}: satellite fetch failed: ${(err as Error).message}${notes.length ? ` [${notes.join("; ")}]` : ""}`);
+      await failed(field, `Satellite fetch failed: ${(err as Error).message}`);
       continue;
     }
 
@@ -142,6 +186,7 @@ Deno.serve(async () => {
     if (saved.warning) notes.push(saved.warning);
     if (saved.error) {
       results.push(`${field.field_name}: could not save NDVI: ${saved.error}`);
+      await failed(field, `Could not save the reading: ${saved.error}`);
       continue;
     }
 
@@ -165,6 +210,7 @@ Deno.serve(async () => {
       results.push(`${field.field_name}: no new image (latest ${image.date} already checked), saved ${saved.saved}${noteText}`);
       continue;
     }
+    newImages++;
     // A field that just got its first 90 days: treat it like a backfill.
     // Alerts should mean "just detected", not something from weeks ago.
     const ageDays = (to.getTime() - new Date(image.date).getTime()) / DAY_MS;
@@ -239,6 +285,7 @@ Deno.serve(async () => {
     });
     if (createErr) {
       results.push(`${field.field_name}: ${drop}% drop found but the alert could not be saved: ${createErr.message}${noteText}`);
+      await failed(field, `Alert could not be saved: ${createErr.message}`);
       continue;
     }
     const outcome = (created as { status?: string; open_since?: string } | null)?.status;
@@ -250,8 +297,17 @@ Deno.serve(async () => {
       results.push(`${field.field_name}: ${drop}% drop already alerted for ${image.date}${noteText}`);
       continue;
     }
+    alertsCreated++;
     results.push(`${field.field_name}: ${isExpectedSenescence ? "EXPECTED RIPENING" : "ALERT"} (${cause}, ${drop}% drop)${noteText}`);
   }
+
+  await logEvent("pipeline.run_finished", {
+    fields_checked: (fields ?? []).length,
+    new_images: newImages,
+    failures,
+    alerts_created: alertsCreated,
+    duration_ms: Date.now() - started,
+  });
 
   return new Response(JSON.stringify({ processed: results.length, results }), {
     headers: { "Content-Type": "application/json" },

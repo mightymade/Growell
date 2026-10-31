@@ -37,6 +37,7 @@ export default function Signup() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
 
+  const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
@@ -74,6 +75,10 @@ export default function Signup() {
     e.preventDefault();
     if (!name.trim()) {
       setError("Enter your name.");
+      return;
+    }
+    if (!agreed) {
+      setError("Please tick the box to agree to the Terms of Use and Privacy Policy.");
       return;
     }
     // Client-side friction against repeated submissions; Supabase's own
@@ -254,7 +259,7 @@ export default function Signup() {
             />
           </div>
 
-          <label htmlFor="signup-phone" className={auth.label}>Phone number</label>
+          <label htmlFor="signup-phone" className={auth.label}>Phone number <span className="font-normal text-ink/55">(optional)</span></label>
           <input
             id="signup-phone"
             type="tel"
@@ -266,7 +271,7 @@ export default function Signup() {
             className={`mb-4 ${auth.inputPlain}`}
           />
 
-          <label htmlFor="signup-location" className={auth.label}>District / location</label>
+          <label htmlFor="signup-location" className={auth.label}>District / location <span className="font-normal text-ink/55">(optional)</span></label>
           <input
             id="signup-location"
             type="text"
@@ -286,6 +291,31 @@ export default function Signup() {
             </label>
           </div>
           {avatarError && <p className="mt-2 text-xs text-laterite-700">{avatarError}</p>}
+
+          {/* Consent before any data is saved (Data Protection and Privacy Act, s.7). */}
+          <label className="mt-6 flex cursor-pointer items-start gap-3 rounded-lg bg-parchment p-3 text-sm leading-5 text-ink/80">
+            <input
+              type="checkbox"
+              checked={agreed}
+              onChange={(e) => setAgreed(e.target.checked)}
+              className="mt-0.5 h-5 w-5 shrink-0 accent-[#15884A]"
+              aria-describedby="signup-consent-note"
+            />
+            <span>
+              I am 18 or older, and I agree to the{" "}
+              <Link to="/terms" target="_blank" className="font-medium text-growth-700 underline">
+                Terms of Use
+              </Link>{" "}
+              and{" "}
+              <Link to="/privacy" target="_blank" className="font-medium text-growth-700 underline">
+                Privacy Policy
+              </Link>
+              , including my data being stored by Growell's service providers outside Uganda.
+            </span>
+          </label>
+          <p id="signup-consent-note" className="mt-2 text-xs text-ink/60">
+            You can download your data or delete your account at any time.
+          </p>
 
           {error && <p role="alert" className={auth.error}>{error}</p>}
 

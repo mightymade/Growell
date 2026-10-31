@@ -55,10 +55,22 @@ Deno.serve(async (req) => {
     return json({ error: "Expected JSON body: { field_id: string }" }, 400);
   }
 
+  // Only the field's owner may start a download for it. The field is read
+  // AS the signed-in farmer, so row level security decides: someone else's
+  // field id, a deleted field, or no session at all is simply not found.
+  // Without this, anyone could call this public function with any field id
+  // and use up the satellite quota.
+  const asUser = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+    global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
+  });
+  const { data: owned } = await asUser.from("fields").select("id").eq("id", fieldId).maybeSingle();
+  if (!owned) return json({ error: "Field not found" }, 404);
+
   const { data: field, error: fieldError } = await supabase
     .from("fields")
     .select("id, field_name, boundary_coords, area_hectares")
     .eq("id", fieldId)
+    .is("deleted_at", null)
     .single();
 
   if (fieldError || !field) {

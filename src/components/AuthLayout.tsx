@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 
 /**
  * Shared shell for Login and Signup: one white card centred on a dimmed
@@ -8,7 +9,7 @@ import type { ReactNode } from "react";
  */
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="relative flex min-h-svh items-center justify-center overflow-hidden bg-canopy-950 p-3 sm:p-6">
+    <div className="relative flex min-h-svh items-center justify-center overflow-hidden bg-canopy-950 p-3 pb-16 sm:p-6 sm:pb-16">
       <img
         src="/auth-bg.jpg"
         alt=""
@@ -28,6 +29,14 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         </div>
         <div className="mt-5">{children}</div>
       </div>
+      <nav aria-label="Legal" className="absolute inset-x-0 bottom-0 z-10 flex justify-center gap-1 pb-[max(8px,env(safe-area-inset-bottom))] text-sm">
+        <Link to="/privacy" className="inline-flex min-h-11 items-center rounded px-3 text-white/75 hover:text-white hover:underline">
+          Privacy Policy
+        </Link>
+        <Link to="/terms" className="inline-flex min-h-11 items-center rounded px-3 text-white/75 hover:text-white hover:underline">
+          Terms of Use
+        </Link>
+      </nav>
     </div>
   );
 }
