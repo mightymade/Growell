@@ -5,39 +5,38 @@ import { useWeatherForecast } from "../hooks/useWeatherForecast";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { polygonCentroid } from "../lib/geo";
 import type { LayoutContext } from "../components/AppLayout";
-import Select from "../components/Select";
 import NdviChart from "../components/NdviChart";
 import RainfallChart from "../components/RainfallChart";
 import WeatherSummaryCard from "../components/WeatherSummaryCard";
 import ForecastStrip from "../components/ForecastStrip";
 import GrowthStageCard from "../components/GrowthStageCard";
 import FieldAlertHistory from "../components/FieldAlertHistory";
-import { StatRowSkeleton, ChartCardSkeleton, FieldBodySkeleton } from "../components/Skeleton";
+import { Skeleton, ChartCardSkeleton, FieldGlanceSkeleton } from "../components/Skeleton";
 import { useBackfillStatus } from "../hooks/useBackfillStatus";
-import DeleteFieldDialog from "../components/DeleteFieldDialog";
 import { AUTO_CHECK_MIN_AGE_DAYS, needsAutoCheck, runAutoCheck } from "../lib/autoCheck";
-
-import { healthTrend, healthWord } from "../lib/ndviColor";
-import IconStatCard from "../components/IconStatCard";
 import BrandMark from "../components/BrandMark";
-import { LeafIcon, DropletIcon, SunIcon, BellIcon, WifiOffIcon, TrashIcon } from "../components/icons";
+import { WifiOffIcon } from "../components/icons";
+import type { ChartRange } from "../lib/chartStyle";
 
 // The map (Leaflet) is a big download. Loading it separately lets the numbers
 // and charts appear first, and the map fills in a moment later.
-const SeasonTimelapse = lazy(() => import("../components/SeasonTimelapse"));
+const FieldHealthMap = lazy(() => import("../components/FieldHealthMap"));
 
 // Remembers whichever field you last actually viewed, so landing on
 // /fields with no id in the URL picks up where you left off instead of
 // always defaulting to the same (e.g. first-created) field.
 const LAST_FIELD_KEY = "growell_last_field_id";
 
+/** A date as YYYY-MM-DD in the farmer's own time zone. */
+function isoDay(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export default function FieldDetail() {
   const navigate = useNavigate();
   const { fieldId } = useParams();
   const isOnline = useOnlineStatus();
   const { fields, fieldsLoading, refetchFields } = useOutletContext<LayoutContext>();
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
   // True while the once-per-login check for new images is running. It
   // stays quiet: a small note in the "This season" row, no big banner.
   const [checkingFor, setCheckingFor] = useState<string | null>(null);
@@ -54,7 +53,7 @@ export default function FieldDetail() {
   const [welcomeDismissed, setWelcomeDismissed] = useState(false);
 
   // No field in the URL yet, or a stale/bad field id (e.g. an old
-  // bookmark to a since-deleted field) — fall back to whichever field
+  // bookmark to a since-deleted field), fall back to whichever field
   // was last viewed on this device, or the first field if there's no
   // record of one yet.
   useEffect(() => {
@@ -78,8 +77,6 @@ export default function FieldDetail() {
 
   // Reset the scrubber to "most recent" whenever the farmer switches fields.
   useEffect(() => {
-    setSelectedDate(null);
-    setConfirmingDelete(false);
     setFailedFor(null);
   }, [fieldId]);
 
@@ -118,7 +115,6 @@ export default function FieldDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fieldId, isOnline, detailLoading, backfilling, checkingFor, failedFor]);
 
-  const latestNdvi = ndviHistory.length > 0 ? ndviHistory[ndviHistory.length - 1].ndvi_value : undefined;
   const openAlertCount = alerts.filter((a) => a.status === "open").length;
   const anomalyDates = alerts.map((a) => a.date_detected);
 
@@ -133,50 +129,30 @@ export default function FieldDetail() {
     return count;
   }, [weatherHistory]);
 
-  const ndviTrend = useMemo(() => {
-    if (ndviHistory.length < 2) return null;
-    return healthTrend(
-      Number(ndviHistory[ndviHistory.length - 2].ndvi_value),
-      Number(ndviHistory[ndviHistory.length - 1].ndvi_value),
-    );
-  }, [ndviHistory]);
-
-  const rainfallTrend = useMemo(() => {
-    if (weatherHistory.length < 2) return null;
-    const prev = weatherHistory[weatherHistory.length - 2].rainfall_mm ?? 0;
-    const curr = weatherHistory[weatherHistory.length - 1].rainfall_mm ?? 0;
-    if (prev === curr) return null;
-    return { label: curr > prev ? "Wetter" : "Drier", positive: curr >= prev };
-  }, [weatherHistory]);
+  // The period both stacked charts cover: from the earliest reading or
+  // weather record in the last 90 days, up to today.
+  const chartRange = useMemo<ChartRange>(() => {
+    const today = isoDay(new Date());
+    const cutoff = isoDay(new Date(Date.now() - 90 * 86_400_000));
+    const firsts = [ndviHistory[0]?.capture_date, weatherHistory[0]?.record_date]
+      .filter((d): d is string => !!d)
+      .map((d) => (d < cutoff ? cutoff : d.slice(0, 10)));
+    let start = firsts.length ? firsts.sort()[0] : isoDay(new Date(Date.now() - 28 * 86_400_000));
+    // At least two weeks, so a brand-new field's chart is not squashed.
+    const twoWeeksBack = isoDay(new Date(Date.now() - 14 * 86_400_000));
+    if (start > twoWeeksBack) start = twoWeeksBack;
+    return { start, end: today };
+  }, [ndviHistory, weatherHistory]);
 
   const centroid = selectedField?.boundary_coords ? polygonCentroid(selectedField.boundary_coords) : null;
   const { forecast, loading: forecastLoading } = useWeatherForecast(centroid?.lat ?? null, centroid?.lon ?? null);
 
   return (
-    <div>
-      {/* Phones have no sidebar, so they keep a field picker at the top.
-          On a computer the sidebar already shows which field is open. */}
-      {fields.length > 0 && (
-        <div className="mb-4 flex items-center gap-2 md:hidden">
-          <Select
-            options={fields.map((f) => ({ label: f.field_name, value: f.id }))}
-            value={fieldId ?? ""}
-            onChange={(id) => navigate(`/fields/${id}`)}
-            className="min-w-0 flex-1"
-            ariaLabel="Choose a field"
-          />
-          {selectedField && (
-            <button
-              onClick={() => setConfirmingDelete(true)}
-              aria-label={`Delete ${selectedField.field_name}`}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-ink/65 hover:bg-laterite-50 hover:text-laterite-700 dark:text-parchment/65"
-            >
-              <TrashIcon size={16} />
-            </button>
-          )}
-        </div>
-      )}
-      <DeleteFieldDialog field={confirmingDelete ? (selectedField ?? null) : null} onClose={() => setConfirmingDelete(false)} />
+    // Full height of the visible area on computers, so the at-a-glance
+    // area below can stretch to the bottom of the window.
+    <div className="flex flex-col lg:h-full">
+      {/* Switching and deleting fields: the sidebar on computers, the top
+          bar (field name and its menu) on phones. */}
 
       {!isOnline && !selectedField && (
         <div className="rounded-xl border border-dashed border-laterite-600/30 bg-white dark:bg-night-900 p-10 text-center">
@@ -193,161 +169,118 @@ export default function FieldDetail() {
 
       {selectedField && (
         <>
-          {justAdded && !welcomeDismissed && (
-            <div className="m-in mb-4 flex items-start gap-3 rounded-lg bg-growth-50 p-4 text-sm text-growth-700" role="status">
-              <span className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-growth-600 text-white" aria-hidden>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="m2.5 6.2 2.2 2.2 4.8-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              </span>
-              <p className="flex-1">
-                <span className="font-semibold">{selectedField.field_name} is saved.</span> Growell will check it every day and
-                tell you here if crop health drops. Its last 90 days of history are loading now.
-              </p>
+          {/* First screen on a computer: notices, then the at-a-glance area
+              filling the rest of the window. Alert history is below it, one
+              scroll away. On phones and tablets everything simply stacks. */}
+          <div className="flex flex-col lg:min-h-full lg:shrink-0">
+            {justAdded && !welcomeDismissed && (
+              <div className="m-in mb-4 flex items-start gap-3 rounded-lg bg-growth-50 p-4 text-sm text-growth-700" role="status">
+                <span className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-growth-600 text-white" aria-hidden>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="m2.5 6.2 2.2 2.2 4.8-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                </span>
+                <p className="flex-1">
+                  <span className="font-semibold">{selectedField.field_name} is saved.</span> Growell will check it every day and
+                  tell you here if crop health drops. Its last 90 days of history are loading now.
+                </p>
+                <button
+                  onClick={() => setWelcomeDismissed(true)}
+                  aria-label="Dismiss"
+                  className="-mr-2 -mt-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-md hover:bg-growth-100"
+                >
+                  <svg width="14" height="14" viewBox="0 0 18 18" fill="none" aria-hidden><path d="m4 4 10 10M14 4 4 14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+                </button>
+              </div>
+            )}
+            {backfilling && !autoChecking && (
+              <div className="mb-4 flex items-start gap-3 rounded-lg bg-sky-100 p-3 text-sm text-sky-700">
+                <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-sky-600 motion-safe:animate-pulse" aria-hidden />
+                <p>Loading 90 days of satellite and weather history for this field. The charts will fill in as soon as it arrives.</p>
+              </div>
+            )}
+
+            {(detailError || problems.length > 0) && !showSkeleton && (
+              <div className="mb-4 rounded-lg bg-laterite-50 p-3 text-sm text-laterite-700">
+                {detailError ?? problems.join(" ")} The rest of the page still shows what did load.
+              </div>
+            )}
+
+            {openAlertCount > 0 && !showSkeleton && (
               <button
-                onClick={() => setWelcomeDismissed(true)}
-                aria-label="Dismiss"
-                className="-mr-2 -mt-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-md hover:bg-growth-100"
+                onClick={() => navigate(`/alerts?field=${fieldId}`)}
+                className="mb-4 flex h-12 w-full shrink-0 items-center justify-between gap-3 rounded-lg bg-laterite-50 px-4 text-left text-sm text-laterite-700 hover:bg-laterite-100 active:bg-laterite-100 md:h-10"
               >
-                <svg width="14" height="14" viewBox="0 0 18 18" fill="none" aria-hidden><path d="m4 4 10 10M14 4 4 14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+                <span className="truncate">
+                  <span className="font-semibold">
+                    {openAlertCount} open alert{openAlertCount === 1 ? "" : "s"}
+                  </span>{" "}
+                  on this field need{openAlertCount === 1 ? "s" : ""} a look.
+                </span>
+                <span className="shrink-0 font-semibold">Review</span>
               </button>
-            </div>
-          )}
-          {backfilling && !autoChecking && (
-            <div className="mb-4 flex items-start gap-3 rounded-lg bg-sky-100 p-3 text-sm text-sky-700">
-              <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-sky-600 motion-safe:animate-pulse" aria-hidden />
-              <p>Loading 90 days of satellite and weather history for this field. The charts will fill in as soon as it arrives.</p>
-            </div>
-          )}
+            )}
 
-          {(detailError || problems.length > 0) && !showSkeleton && (
-            <div className="mb-4 rounded-lg bg-laterite-50 p-3 text-sm text-laterite-700">
-              {detailError ?? problems.join(" ")} The rest of the page still shows what did load.
-            </div>
-          )}
-
-          {openAlertCount > 0 && !showSkeleton && (
-            <button
-              onClick={() => navigate(`/alerts?field=${fieldId}`)}
-              className="mb-4 flex w-full items-center justify-between gap-3 rounded-lg bg-laterite-50 px-4 py-3 text-left text-sm text-laterite-700 hover:bg-laterite-100"
-            >
-              <span>
-                <span className="font-semibold">
-                  {openAlertCount} open alert{openAlertCount === 1 ? "" : "s"}
-                </span>{" "}
-                on this field need{openAlertCount === 1 ? "s" : ""} a look.
-              </span>
-              <span className="shrink-0 font-semibold">Review</span>
-            </button>
-          )}
-
-          {showSkeleton ? (
-            <div className="mb-8">
-              <StatRowSkeleton />
-            </div>
-          ) : (
-            <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
-              <IconStatCard
-                icon={<LeafIcon />}
-                iconTint="growth"
-                label="Crop health"
-                value={latestNdvi !== undefined ? healthWord(latestNdvi) : "Not yet"}
-                trend={ndviTrend}
-              />
-              <IconStatCard
-                icon={<DropletIcon />}
-                iconTint="sky"
-                label="Latest rain"
-                value={weather && weather.rainfall_mm !== null ? `${weather.rainfall_mm.toFixed(1)} mm` : "No data"}
-                trend={rainfallTrend}
-              />
-              <IconStatCard
-                icon={<SunIcon />}
-                iconTint="canopy"
-                label="Days without rain"
-                value={drySpellDays === null ? "No data" : `${drySpellDays} day${drySpellDays === 1 ? "" : "s"}`}
-                trend={drySpellDays === null ? null : { label: drySpellDays >= 10 ? "Watch" : "Fine", positive: drySpellDays < 10 }}
-              />
-              <IconStatCard
-                icon={<BellIcon />}
-                iconTint="laterite"
-                label="Alerts to answer"
-                value={String(openAlertCount)}
-                trend={{ label: openAlertCount > 0 ? "Answer" : "All clear", positive: openAlertCount === 0 }}
-              />
-            </div>
-          )}
-
-          {/* Season: the field over time, with what's happening to it now. */}
-          <section className="mb-8" aria-labelledby="season-heading">
-            <h2 id="season-heading" className="mb-3 font-display text-base font-semibold text-ink dark:text-parchment">
+            <h2 id="season-heading" className="mb-2 text-base font-semibold text-ink dark:text-parchment">
               This season
             </h2>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <div className="lg:col-span-2 [&>*]:h-full">
-                {showSkeleton ? (
-                  <ChartCardSkeleton height={420} />
-                ) : (
-                  <Suspense fallback={<ChartCardSkeleton height={420} />}>
-                    <SeasonTimelapse
-                      fieldId={selectedField.id}
-                      boundary={selectedField.boundary_coords}
-                      ndviHistory={ndviHistory}
-                      weatherHistory={weatherHistory}
+
+            {showSkeleton ? (
+              <FieldGlanceSkeleton />
+            ) : (
+              <section
+                aria-labelledby="season-heading"
+                className="flex flex-col gap-4 lg:grid lg:grow lg:basis-0 lg:grid-cols-2"
+              >
+                {/* Left: the field now. The map takes the height the two
+                    cards under it leave over. */}
+                <div className="flex flex-col gap-4 lg:min-h-0">
+                  <div className="h-56 md:h-72 lg:h-0 lg:min-h-[240px] lg:grow lg:basis-0">
+                    <Suspense fallback={<Skeleton className="h-full w-full rounded-xl" />}>
+                      <FieldHealthMap
+                        fieldId={selectedField.id}
+                        boundary={selectedField.boundary_coords}
+                        ndviHistory={ndviHistory}
+                        anomalyDates={anomalyDates}
+                      />
+                    </Suspense>
+                  </div>
+                  <ForecastStrip forecast={forecast} loading={forecastLoading} />
+                  <WeatherSummaryCard weather={weather} drySpellDays={drySpellDays} />
+                </div>
+
+                {/* Right: how the season is going. Growth stage on top, then
+                    the two charts over the same dates, so a dip in health
+                    lines up with the rain under it. */}
+                <div className="flex flex-col gap-4 lg:min-h-0">
+                  <GrowthStageCard field={selectedField} onUpdated={refetchFields} />
+                  <div className="lg:grow lg:basis-0">
+                    <NdviChart
+                      data={ndviHistory}
                       anomalyDates={anomalyDates}
-                      selectedDate={selectedDate}
-                      onSelectDate={setSelectedDate}
+                      areaHectares={selectedField.area_hectares}
+                      range={chartRange}
                     />
-                  </Suspense>
-                )}
-              </div>
-              {/* The rail stretches to the map card's height; the last card takes
-                  up the extra space so both columns end on the same line. */}
-              <div className="flex flex-col gap-4">
-                <GrowthStageCard field={selectedField} onUpdated={refetchFields} />
-                <ForecastStrip forecast={forecast} loading={forecastLoading} />
-                {showSkeleton ? <ChartCardSkeleton height={90} /> : <WeatherSummaryCard weather={weather} className="lg:flex-1" />}
-              </div>
-            </div>
-          </section>
+                  </div>
+                  <div className="lg:grow lg:basis-0">
+                    <RainfallChart data={weatherHistory} range={chartRange} />
+                  </div>
+                </div>
+              </section>
+            )}
+          </div>
 
-          {/* Trends: the numbers behind the season view. The slider above
-              moves the marker on both charts. */}
-          <section className="mb-8" aria-labelledby="trends-heading">
-            <SectionHeading id="trends-heading" title="Health and rain over time" />
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              {showSkeleton ? (
-                <>
-                  <ChartCardSkeleton height={220} />
-                  <ChartCardSkeleton height={220} />
-                </>
-              ) : (
-                <>
-                  <NdviChart
-                    data={ndviHistory}
-                    anomalyDates={anomalyDates}
-                    selectedDate={selectedDate}
-                    areaHectares={selectedField.area_hectares}
-                  />
-                  <RainfallChart data={weatherHistory} selectedDate={selectedDate} />
-                </>
-              )}
-            </div>
-          </section>
-
-          {/* A short history. Reading and answering alerts happens on the
-              Alerts page, which this links to already filtered. */}
-          <section id="alerts-panel" className="scroll-mt-4" aria-label="Alert history">
+          {/* A short history, one scroll down. Reading and answering alerts
+              happens on the Alerts page, which this links to already filtered. */}
+          <section id="alerts-panel" className="mt-8 scroll-mt-4" aria-label="Alert history">
             {showSkeleton ? (
               <ChartCardSkeleton height={80} />
             ) : (
               <FieldAlertHistory alerts={alerts} fieldId={fieldId as string} />
             )}
           </section>
-
-
         </>
       )}
 
-      {isOnline && fieldsLoading && <FieldBodySkeleton />}
+      {isOnline && fieldsLoading && <FieldGlanceSkeleton />}
 
       {isOnline && !selectedField && !fieldsLoading && (
         <div className="rounded-xl border border-dashed border-canopy-900/20 dark:border-white/20 bg-white dark:bg-night-900 p-10 text-center">
@@ -366,14 +299,5 @@ export default function FieldDetail() {
       )}
 
     </div>
-  );
-}
-
-/** Title for one part of the field page. */
-function SectionHeading({ id, title }: { id: string; title: string }) {
-  return (
-    <h2 id={id} className="mb-3 font-display text-base font-semibold text-ink dark:text-parchment">
-      {title}
-    </h2>
   );
 }

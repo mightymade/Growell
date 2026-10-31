@@ -46,9 +46,30 @@ export function shortDay(d: Date | number | string): string {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-/** Up to `count` evenly spaced tick times between two timestamps. */
-export function evenTicks(min: number, max: number, count: number): number[] {
+/**
+ * The field page stacks the crop health and rain charts, so a farmer can
+ * read straight down from a dip in health to the rain under it. Both use
+ * these, so the same date sits at the same place in both plots.
+ */
+export const CHART_MARGIN = { top: 12, right: 0, left: 8, bottom: 0 } as const;
+export const Y_AXIS_WIDTH = 80;
+export const X_TICK_COUNT = 4;
+
+/** The period both stacked charts cover, as plain ISO dates. */
+export type ChartRange = { start: string; end: string };
+
+/**
+ * Date labels for the stacked charts: one in the middle of each of `count`
+ * equal parts of the period. Unlike labels at the very edges, these never
+ * get dropped for lack of room, so both charts always show all of them.
+ */
+export function insetTicks(min: number, max: number, count: number): number[] {
   if (max <= min) return [min];
-  const step = (max - min) / (count - 1);
-  return Array.from({ length: count }, (_, i) => Math.round(min + step * i));
+  const part = (max - min) / count;
+  return Array.from({ length: count }, (_, i) => Math.round(min + part * (i + 0.5)));
+}
+
+/** A calendar date as a timestamp at local midnight (how both charts place dates). */
+export function dayTime(iso: string): number {
+  return new Date(`${iso.slice(0, 10)}T00:00:00`).getTime();
 }

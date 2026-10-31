@@ -8,6 +8,16 @@ import NotificationBell from "../components/NotificationBell";
 import { HomeSkeleton } from "../components/Skeleton";
 import SatelliteStatCard from "../components/SatelliteStatCard";
 import FieldsOverview from "../components/FieldsOverview";
+import FieldListRow from "../components/FieldListRow";
+import { useFarmerProfile } from "../hooks/useFarmerProfile";
+import { useFieldRows } from "../hooks/useFieldRows";
+import { useIsPhone } from "../hooks/useIsPhone";
+
+/** "Good morning" / "Good afternoon" / "Good evening" by the phone's clock. */
+function greeting() {
+  const h = new Date().getHours();
+  return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+}
 import RecentAlertsCard from "../components/RecentAlertsCard";
 import YearAtAGlance from "../components/YearAtAGlance";
 import { LeafIcon, BellIcon, MapIcon, PlusIcon } from "../components/icons";
@@ -42,14 +52,29 @@ export default function Home() {
   const openAlerts = alerts.filter((a) => a.status === "open");
   const fieldsNeedingAttention = new Set(openAlerts.map((a) => a.field_id)).size;
 
+  const { profile } = useFarmerProfile();
+  const firstName = profile?.name?.trim().split(/\s+/)[0] ?? "";
+  const { rows } = useFieldRows(fields);
+  const isPhone = useIsPhone();
+
   const lastDates = useMemo(() => Object.values(snap?.lastPassByField ?? {}), [snap]);
 
   if (fieldsLoading || alertsLoading || snapLoading) return <HomeSkeleton />;
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="font-display text-lg font-bold text-ink dark:text-parchment">Overview</h1>
+      {/* Phones: the top bar already says Growell and holds Add field. */}
+      <div className="mb-5 md:hidden">
+        <p className="text-2xl font-semibold tracking-tight text-ink dark:text-parchment">
+          {greeting()}
+          {firstName ? `, ${firstName}` : ""}
+        </p>
+        <p className="mt-1 text-sm text-ink/70 dark:text-parchment/70">
+          {new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}
+        </p>
+      </div>
+      <div className="mb-6 hidden items-center justify-between md:flex">
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-ink dark:text-parchment">Overview</h1>
         <div className="flex items-center gap-2">
           {fields.length > 0 && (
             <button
@@ -80,7 +105,7 @@ export default function Home() {
         </div>
       ) : (
         <>
-          <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+          <div className="mb-6 grid grid-cols-2 gap-3 md:mb-4 md:grid-cols-4 md:gap-4">
             <IconStatCard icon={<MapIcon />} iconTint="growth" label="Your fields" value={String(fields.length)} />
             <IconStatCard
               icon={<BellIcon />}
@@ -95,7 +120,30 @@ export default function Home() {
 
           <YearAtAGlance fields={fields} />
 
+          {/* Phones: the same rows as the Fields tab, at most four. */}
+          <section className="mb-6 md:hidden" aria-labelledby="home-fields">
+            <div className="mb-2 flex items-center justify-between">
+              <h2 id="home-fields" className="text-base font-semibold text-ink dark:text-parchment">
+                Your fields
+              </h2>
+              {fields.length > 4 && (
+                <button
+                  onClick={() => navigate("/fields")}
+                  className="-mr-3 flex h-11 items-center rounded-lg px-3 text-sm font-medium text-growth-700 active:bg-growth-50 dark:text-growth-500"
+                >
+                  See all {fields.length}
+                </button>
+              )}
+            </div>
+            <div className="divide-y divide-canopy-900/5 overflow-hidden rounded-xl bg-white shadow-e1 dark:divide-white/5 dark:bg-night-900">
+              {rows.slice(0, 4).map((r) => (
+                <FieldListRow key={r.id} row={r} onOpen={(id) => navigate(`/fields/${id}`)} />
+              ))}
+            </div>
+          </section>
+
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="hidden md:contents">
             <FieldsOverview
               rows={snapshots.map((f) => ({
                 id: f.id,
@@ -110,9 +158,10 @@ export default function Home() {
               }))}
               onOpen={(id) => navigate(`/fields/${id}`)}
             />
+            </div>
 
             <RecentAlertsCard
-              alerts={alerts.slice(0, 4)}
+              alerts={alerts.slice(0, isPhone ? 3 : 4)}
               openCount={openAlerts.length}
               onOpenAlert={(a) => navigate(`/alerts?field=${a.field_id}&alert=${a.id}`)}
               onViewAll={() => navigate("/alerts")}

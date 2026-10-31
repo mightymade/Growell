@@ -15,14 +15,14 @@ export function Skeleton({ className = "", height }: { className?: string; heigh
 /** Wraps a skeleton so screen readers hear "Loading" once, not a pile of
  *  boxes. The skeleton only appears after 150ms, so a fast load never
  *  flashes grey boxes; the space is still held so nothing jumps. */
-export function LoadingRegion({ children, label = "Loading" }: { children: ReactNode; label?: string }) {
+export function LoadingRegion({ children, label = "Loading", className = "" }: { children: ReactNode; label?: string; className?: string }) {
   const [show, setShow] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setShow(true), 150);
     return () => clearTimeout(t);
   }, []);
   return (
-    <div role="status" aria-live="polite" aria-busy="true" className={show ? "m-in" : "invisible"}>
+    <div role="status" aria-live="polite" aria-busy="true" className={`${show ? "m-in" : "invisible"} ${className}`}>
       <span className="sr-only">{label}</span>
       {children}
     </div>
@@ -31,13 +31,13 @@ export function LoadingRegion({ children, label = "Loading" }: { children: React
 
 const card = "rounded-xl bg-white dark:bg-night-900 shadow-e1";
 
-/** Same shape as IconStatCard. */
+/** Same shape as IconStatCard (Home's top row). */
 export function StatCardSkeleton() {
   return (
-    <div className={`flex flex-col gap-3 p-4 ${card}`}>
-      <Skeleton className="h-9 w-9" />
-      <div>
-        <Skeleton className="h-6 w-16" />
+    <div className={`flex items-start gap-3 p-3 sm:p-4 lg:gap-2 lg:p-3 xl:gap-3 xl:p-4 ${card}`}>
+      <Skeleton className="h-8 w-8 shrink-0" />
+      <div className="flex-1">
+        <Skeleton className="mt-1 h-5 w-16" />
         <Skeleton className="mt-2 h-4 w-24" />
       </div>
     </div>
@@ -54,6 +54,7 @@ export function StatRowSkeleton({ count = 4 }: { count?: number }) {
   );
 }
 
+/** A card with a title line and a block, for charts and lists. */
 export function ChartCardSkeleton({ height = 220, title = true }: { height?: number; title?: boolean }) {
   return (
     <div className={`p-4 ${card}`}>
@@ -106,31 +107,25 @@ export function HomeSkeleton() {
 }
 
 /** The body of a field page, below the field picker. */
-export function FieldBodySkeleton() {
+/**
+ * Loading placeholder in the same shape as the field page's at-a-glance
+ * area (map, forecast and weather on the left; growth stage and two
+ * stacked charts on the right),
+ * so nothing jumps when the data arrives.
+ */
+export function FieldGlanceSkeleton() {
   return (
-    <LoadingRegion label="Loading field data">
-      <div className="mb-6">
-        <StatRowSkeleton />
-      </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div className="space-y-4 md:col-span-2">
-          <div className={`p-4 ${card}`}>
-            <Skeleton className="h-8 w-full" />
-          </div>
-          <ChartCardSkeleton height={220} />
-          <ChartCardSkeleton height={160} />
+    <LoadingRegion label="Loading field data" className="flex flex-col lg:grow lg:basis-0">
+      <div className="flex flex-col gap-4 lg:grid lg:grow lg:basis-0 lg:grid-cols-2">
+        <div className="flex flex-col gap-4">
+          <Skeleton className="h-56 w-full rounded-xl md:h-72 lg:h-0 lg:min-h-[240px] lg:grow lg:basis-0" />
+          <Skeleton className="h-[136px] w-full rounded-xl" />
+          <Skeleton className="h-[200px] w-full rounded-xl" />
         </div>
-        <div className="space-y-4">
-          <div className={`p-4 ${card}`}>
-            <Skeleton className="mb-3 h-4 w-24" />
-            <div className="grid grid-cols-5 gap-2">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-16" />
-              ))}
-            </div>
-          </div>
-          <Skeleton className="h-48 w-full rounded-xl" />
-          <ChartCardSkeleton height={60} />
+        <div className="flex flex-col gap-4">
+          <Skeleton className="h-[120px] w-full rounded-xl" />
+          <Skeleton className="h-[300px] w-full rounded-xl lg:h-0 lg:min-h-[260px] lg:grow lg:basis-0" />
+          <Skeleton className="h-[300px] w-full rounded-xl lg:h-0 lg:min-h-[260px] lg:grow lg:basis-0" />
         </div>
       </div>
     </LoadingRegion>

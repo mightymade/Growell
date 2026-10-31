@@ -72,32 +72,37 @@ function AnimatedValue({ value }: { value: string }) {
 }
 
 /**
- * Small summary card. Icon and status badge share the top row and the
- * number gets the full width below, so nothing is cut off on a phone or
- * in a narrow four-card row.
+ * Compact summary card: icon on the left, the number and its label beside
+ * it. The status badge sits top right on wide screens and drops under the
+ * label on narrower ones, so it never overlaps the number.
  */
 export default function IconStatCard({ icon, iconTint, label, value, trend }: Props) {
   return (
-    <div className="flex flex-col gap-3 rounded-xl bg-white p-4 shadow-e1 dark:bg-night-900">
-      <div className="flex items-center justify-between gap-2">
-        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${TINTS[iconTint]}`} aria-hidden>
-          {icon}
-        </span>
+    <div className="relative flex items-start gap-3 rounded-xl bg-white p-3 shadow-e1 dark:bg-night-900 sm:p-4 lg:gap-2 lg:p-3 xl:gap-3 xl:p-4">
+      <span
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg [&>svg]:h-4 [&>svg]:w-4 ${TINTS[iconTint]}`}
+        aria-hidden
+      >
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p
+          className={`font-display text-lg font-semibold leading-7 text-ink tabular-nums dark:text-parchment ${
+            trend ? "xl:pr-24" : ""
+          }`}
+        >
+          <AnimatedValue value={value} />
+        </p>
+        <p className="text-xs leading-4 text-ink/70 dark:text-parchment/70 sm:text-sm sm:leading-5 lg:text-xs lg:leading-4 xl:text-sm xl:leading-5">{label}</p>
         {trend && (
           <span
-            className={`min-w-0 truncate rounded-full px-2 py-1 text-xs font-semibold ${
+            className={`mt-2 inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold xl:absolute xl:right-4 xl:top-4 xl:mt-0 ${
               trend.positive ? "bg-growth-100 text-growth-700" : "bg-laterite-100 text-laterite-700"
             }`}
           >
             {trend.label}
           </span>
         )}
-      </div>
-      <div className="min-w-0">
-        <p className="font-display text-xl font-semibold leading-tight text-ink tabular-nums dark:text-parchment">
-          <AnimatedValue value={value} />
-        </p>
-        <p className="mt-1 text-sm leading-tight text-ink/70 dark:text-parchment/70">{label}</p>
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { updatePlantedDate } from "../lib/api/fields";
 import { computeGrowthStage } from "../lib/cropStages";
 import DatePicker from "./DatePicker";
+import { useIsPhone } from "../hooks/useIsPhone";
 import type { Field } from "../lib/types";
 
 type Props = {
@@ -13,6 +14,7 @@ type Props = {
 
 export default function GrowthStageCard({ field, onUpdated }: Props) {
   const [editing, setEditing] = useState(false);
+  const isPhone = useIsPhone();
   const [date, setDate] = useState("");
   const queryClient = useQueryClient();
 
@@ -55,7 +57,7 @@ export default function GrowthStageCard({ field, onUpdated }: Props) {
         </p>
         <button
           onClick={() => setEditing(true)}
-          className="rounded-lg bg-growth-50 px-3 py-2 text-xs font-semibold text-growth-700 hover:bg-growth-100"
+          className="h-11 rounded-lg bg-growth-50 px-4 text-sm font-semibold text-growth-700 hover:bg-growth-100 active:bg-growth-100 md:h-auto md:px-3 md:py-2 md:text-xs"
         >
           + Add planting date
         </button>
@@ -68,24 +70,36 @@ export default function GrowthStageCard({ field, onUpdated }: Props) {
       <div className={shell}>
         <p className="mb-2 font-display text-sm font-semibold text-ink dark:text-parchment">When was this field planted?</p>
         <div className="flex gap-2">
-          <DatePicker
-            value={date}
-            onChange={setDate}
-            max={new Date().toISOString().slice(0, 10)}
-            placeholder="Select date"
-            className="flex-1"
-          />
+          {isPhone ? (
+            // The phone's own date picker.
+            <input
+              type="date"
+              aria-label="Planting date"
+              value={date}
+              max={new Date().toISOString().slice(0, 10)}
+              onChange={(e) => setDate(e.target.value)}
+              className="min-w-0 flex-1 rounded-lg border border-canopy-900/15 bg-white px-3 text-base text-ink dark:border-white/15 dark:bg-night-950 dark:text-parchment"
+            />
+          ) : (
+            <DatePicker
+              value={date}
+              onChange={setDate}
+              max={new Date().toISOString().slice(0, 10)}
+              placeholder="Select date"
+              className="flex-1"
+            />
+          )}
           <button
             onClick={handleSave}
             disabled={mutation.isPending || !date}
-            className="rounded-lg bg-growth-600 px-3 py-2 text-xs font-semibold text-white hover:bg-growth-600/90 disabled:opacity-50"
+            className="h-12 rounded-lg bg-growth-600 px-4 text-sm font-semibold text-white hover:bg-growth-600/90 disabled:opacity-50 md:h-auto md:px-3 md:py-2 md:text-xs"
           >
             <BusyLabel busy={mutation.isPending} label="Save" busyLabel="Saving…" />
           </button>
           <button
             onClick={() => setEditing(false)}
             disabled={mutation.isPending}
-            className="rounded-lg border border-canopy-900/15 dark:border-white/15 px-3 py-2 text-xs font-medium text-ink/70 dark:text-parchment/70 hover:bg-parchment dark:hover:bg-white/5 disabled:opacity-50"
+            className="h-12 rounded-lg border border-canopy-900/15 px-4 text-sm font-medium text-ink/70 hover:bg-parchment disabled:opacity-50 dark:border-white/15 dark:text-parchment/70 dark:hover:bg-white/5 md:h-auto md:px-3 md:py-2 md:text-xs"
           >
             Cancel
           </button>
@@ -102,7 +116,10 @@ export default function GrowthStageCard({ field, onUpdated }: Props) {
     <div className={shell}>
       <div className="flex items-center justify-between">
         <p className="font-display text-sm font-semibold text-ink dark:text-parchment">Growth stage</p>
-        <button onClick={() => setEditing(true)} className="text-xs text-ink/70 dark:text-parchment/70 hover:text-growth-700">
+        <button
+          onClick={() => setEditing(true)}
+          className="-my-3 -mr-3 flex h-11 min-w-11 items-center justify-center rounded-lg px-3 text-sm text-ink/70 hover:text-growth-700 active:bg-parchment dark:text-parchment/70 dark:active:bg-white/5 md:-my-0 md:-mr-0 md:h-auto md:min-w-0 md:px-0 md:text-xs"
+        >
           Edit
         </button>
       </div>

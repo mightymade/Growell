@@ -1,15 +1,14 @@
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useLayoutEffect, useRef } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useFields } from "../hooks/useFields";
 import { useFarmerProfile } from "../hooks/useFarmerProfile";
 import { useAllFieldAlerts } from "../hooks/useAllFieldAlerts";
 import { useLiveAlerts } from "../hooks/useLiveAlerts";
 import NewAlertToast from "./NewAlertToast";
-import NotificationBell from "./NotificationBell";
 import { OfflineBanner, RefreshBar } from "./ShellStatus";
 import Sidebar from "./Sidebar";
 import BottomTabBar from "./BottomTabBar";
-import Avatar from "./Avatar";
+import MobileTopBar from "./MobileTopBar";
 import DeactivatedGate from "./DeactivatedGate";
 import IdleWarningModal from "./IdleWarningModal";
 import { PageSkeleton } from "./Skeleton";
@@ -29,7 +28,7 @@ export type LayoutContext = {
 export default function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { profile, loading: profileLoading, refetch: refetchProfile } = useFarmerProfile();
+  const { profile, refetch: refetchProfile } = useFarmerProfile();
   const { fields, loading: fieldsLoading, refetch: refetchFields } = useFields();
   const { alerts, loading: alertsLoading } = useAllFieldAlerts();
   // Live updates, the new-alert toast, and the unread count in the tab title.
@@ -40,6 +39,19 @@ export default function AppLayout() {
   // clear once the farmer has seen the alerts. How many still need an
   // answer is shown separately on Home and the Alerts page.
   const unreadCount = live.unread;
+
+  // Phones scroll the whole page. Remember where each screen was scrolled
+  // to, so going back to a tab returns to the same place; new screens
+  // start at the top.
+  const scrollMemory = useRef(new Map<string, number>());
+  useEffect(() => {
+    const save = () => scrollMemory.current.set(location.pathname, window.scrollY);
+    window.addEventListener("scroll", save, { passive: true });
+    return () => window.removeEventListener("scroll", save);
+  }, [location.pathname]);
+  useLayoutEffect(() => {
+    window.scrollTo(0, scrollMemory.current.get(location.pathname) ?? 0);
+  }, [location.pathname]);
 
   // While the farmer looks at the first screen, quietly download the code for
   // the other tabs, so tapping them is instant instead of waiting on the network.
@@ -61,20 +73,10 @@ export default function AppLayout() {
   return (
     <div className="app-shell flex min-h-dvh flex-col bg-parchment dark:bg-night-950 md:fixed md:inset-0 md:min-h-0 md:flex-row md:overflow-clip">
       <RefreshBar />
-      {/* Mobile top bar — just branding + a way to your own settings.
-          Navigation itself lives entirely in the bottom tab bar now. */}
-      <header className="flex items-center justify-between bg-canopy-900 px-4 py-3 text-parchment md:hidden">
-        <div className="flex items-center gap-2">
-          <img src="/logo.svg" alt="" className="h-[22px] w-[22px]" />
-          <span className="font-display text-sm font-semibold">Growell</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <NotificationBell tone="onDark" />
-        <button onClick={() => navigate("/settings")} aria-label="Settings" className="rounded-lg p-2 hover:bg-white/10">
-          <Avatar avatarUrl={profile?.avatar_url} name={profile?.name} size={28} loading={profileLoading} fallbackClassName="bg-white/15 text-white text-xs" />
-        </button>
-        </div>
-      </header>
+      {/* Phones: a top bar naming the screen, pinned to the top. Moving
+          between screens is the bottom tab bar's job, so nothing here
+          repeats it. */}
+      <MobileTopBar fields={fields} />
 
       <Sidebar openAlertCount={unreadCount} fields={fields} />
 
@@ -82,11 +84,18 @@ export default function AppLayout() {
           Without it, wide content (the map, charts) pushed the field page
           past the right edge of a laptop screen. */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <OfflineBanner />
-        <main className="flex-1 p-4 md:min-h-0 md:overflow-y-auto md:overscroll-contain md:p-6">
+        <div className="hidden md:block">
+          <OfflineBanner />
+        </div>
+        {/* On phones the page scrolls between the pinned bars; phone-main
+            pads it so nothing hides under either of them. */}
+        <main className="phone-main flex-1 px-4 md:min-h-0 md:overflow-y-auto md:overscroll-contain md:p-6">
+          <div className="mb-4 md:hidden [&:empty]:hidden">
+            <OfflineBanner />
+          </div>
           <Suspense fallback={<PageSkeleton />}>
             {/* Keyed by path so each page fades and rises in on arrival. */}
-            <div key={location.pathname} className="m-page">
+            <div key={location.pathname} className="m-page md:h-full">
               <Outlet context={{ fields, fieldsLoading, refetchFields } satisfies LayoutContext} />
             </div>
           </Suspense>

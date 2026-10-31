@@ -4,19 +4,18 @@ import type { NdviPoint } from "../lib/types";
 import { useTheme } from "../hooks/useTheme";
 import { MIN_RELIABLE_HECTARES } from "../lib/fieldSize";
 import { healthTrend, healthWord } from "../lib/ndviColor";
-import { AXIS_FONT, chartColors, evenTicks, shortDay } from "../lib/chartStyle";
+import { AXIS_FONT, CHART_MARGIN, X_TICK_COUNT, Y_AXIS_WIDTH, chartColors, dayTime, insetTicks, shortDay, type ChartRange } from "../lib/chartStyle";
 import ChartTooltip, { KeyDot } from "./ChartTooltip";
 
 type Props = {
   data: NdviPoint[];
   anomalyDates?: string[];
-  /** Full ISO date selected on the season timelapse; drawn as a thin marker. */
-  selectedDate?: string | null;
   /** Lets the empty and "rough reading" notes mention small fields. */
   areaHectares?: number | null;
+  /** Shared with the rain chart, so dates line up when they are stacked. */
+  range: ChartRange;
 };
 
-const DAY = 86_400_000;
 // Health words sit in bands between these scores (see lib/ndviColor.ts).
 const BAND_LINES = [0.2, 0.4, 0.6];
 const BAND_LABELS: Record<number, string> = { 0.1: "Poor", 0.3: "Fair", 0.5: "Good", 0.7: "Very good" };
@@ -28,14 +27,14 @@ const BAND_LABELS: Record<number, string> = { 0.1: "Poor", 0.3: "Fair", 0.5: "Go
  * Very good bands instead of raw scores. Drops Growell alerted on are
  * marked with an orange dot.
  */
-export default function NdviChart({ data, anomalyDates = [], selectedDate = null, areaHectares = null }: Props) {
+export default function NdviChart({ data, anomalyDates = [], areaHectares = null, range }: Props) {
   const animate = useAnimateOnce();
   const { isDark } = useTheme();
   const c = chartColors(isDark);
   const anomalySet = new Set(anomalyDates);
 
   const points = data.map((d) => ({
-    t: new Date(`${d.capture_date}T00:00:00`).getTime(),
+    t: dayTime(d.capture_date),
     date: d.capture_date,
     ndvi: Number(d.ndvi_value),
     isAnomaly: anomalySet.has(d.capture_date),
@@ -50,13 +49,10 @@ export default function NdviChart({ data, anomalyDates = [], selectedDate = null
     ? "Your drawn boundary gave no clear pixels, so this reading comes from a small square around the centre of your field."
     : `This field is under ${MIN_RELIABLE_HECTARES} ha, so nearby ground mixes into the reading. Watch the trend more than any single value.`;
 
-  const minT = points.length ? points[0].t : 0;
-  const maxT = points.length ? latest.t : 0;
-  // One reading: give it a week either side so it isn't squashed to the edge.
-  const domain: [number, number] = points.length > 1 ? [minT, maxT] : [minT - 7 * DAY, maxT + 7 * DAY];
-  const ticks = evenTicks(domain[0], domain[1], 4);
+  // The same period as the rain chart below it, so dates line up.
+  const domain: [number, number] = [dayTime(range.start), dayTime(range.end)];
+  const ticks = insetTicks(domain[0], domain[1], X_TICK_COUNT);
   const top = Math.max(0.8, Math.ceil(Math.max(0, ...points.map((p) => p.ndvi)) * 10) / 10);
-  const selectedT = selectedDate ? new Date(`${selectedDate}T00:00:00`).getTime() : null;
 
   function renderDot(props: any) {
     const { cx, cy, payload, index } = props;
@@ -80,7 +76,7 @@ export default function NdviChart({ data, anomalyDates = [], selectedDate = null
     : "";
 
   return (
-    <section className="flex h-full flex-col rounded-xl bg-white p-5 shadow-e1 dark:bg-night-900" aria-labelledby="health-chart-title">
+    <section className="flex h-full min-h-0 flex-col rounded-xl bg-white p-4 shadow-e1 dark:bg-night-900" aria-labelledby="health-chart-title">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 id="health-chart-title" className="text-sm font-medium text-ink/70 dark:text-parchment/70">
@@ -88,14 +84,14 @@ export default function NdviChart({ data, anomalyDates = [], selectedDate = null
           </h3>
           {latest ? (
             <p className="mt-1 flex flex-wrap items-baseline gap-x-2">
-              <span className="font-display text-2xl font-semibold text-ink dark:text-parchment">{healthWord(latest.ndvi)}</span>
+              <span className="font-display text-2xl font-semibold tracking-tight tabular-nums text-ink dark:text-parchment">{healthWord(latest.ndvi)}</span>
               <span className="text-sm text-ink/65 dark:text-parchment/65">
                 {trend && trend.label !== "Steady" ? `${trend.label.toLowerCase()}, ` : ""}
                 {shortDay(latest.date)}
               </span>
             </p>
           ) : (
-            <p className="mt-1 font-display text-2xl font-semibold text-ink/65 dark:text-parchment/65">No reading yet</p>
+            <p className="mt-1 font-display tracking-tight text-2xl font-semibold text-ink/65 dark:text-parchment/65">No reading yet</p>
           )}
         </div>
         {showApproximate && (
@@ -119,9 +115,11 @@ export default function NdviChart({ data, anomalyDates = [], selectedDate = null
       ) : (
         <>
           <p className="sr-only">{summary}</p>
-          <div className="mt-4 flex-1" aria-hidden>
-            <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={points} margin={{ top: 8, right: 0, left: 20, bottom: 0 }}>
+          {/* On computers the plot has no height of its own (h-0) and takes
+              whatever the card is given, so the page can fit one screen. */}
+          <div className="mt-3 h-[220px] lg:h-0 lg:min-h-[160px] lg:grow lg:basis-0" aria-hidden>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={points} margin={CHART_MARGIN}>
                 <defs>
                   <linearGradient id="healthWash" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor={c.health} stopOpacity={0.16} />
@@ -136,7 +134,9 @@ export default function NdviChart({ data, anomalyDates = [], selectedDate = null
                   type="number"
                   scale="time"
                   domain={domain}
+                  allowDataOverflow
                   ticks={ticks}
+                  interval={0}
                   tickFormatter={shortDay}
                   tick={{ ...AXIS_FONT, fill: c.axisText }}
                   axisLine={{ stroke: c.grid }}
@@ -151,9 +151,8 @@ export default function NdviChart({ data, anomalyDates = [], selectedDate = null
                   tick={{ ...AXIS_FONT, fill: c.axisText }}
                   axisLine={false}
                   tickLine={false}
-                  width={80}
+                  width={Y_AXIS_WIDTH}
                 />
-                {selectedT !== null && <ReferenceLine x={selectedT} stroke={c.marker} strokeWidth={1} />}
                 <Tooltip
                   cursor={{ stroke: c.marker, strokeWidth: 1 }}
                   content={({ active, payload }) => {

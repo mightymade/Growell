@@ -58,6 +58,14 @@ type Props = {
   center?: [number, number]; // [lat, lng]
   zoom?: number;
   onBoundaryChange: (result: BoundaryResult | null) => void;
+  /**
+   * "panel" (computers): search bar above the map and Geoman's toolbar.
+   * "fullscreen" (phones): the map fills the screen with large floating
+   * controls for searching and drawing.
+   */
+  variant?: "panel" | "fullscreen";
+  /** Change this number to remove the drawn shape (the phone "Redraw" button). */
+  clearSignal?: number;
   /** Extra classes on the outer wrapper — pass "h-full" to let the map
    *  fill whatever height its parent gives it (used for the desktop
    *  side-by-side layout). Defaults to a fixed height for simple uses. */
@@ -79,7 +87,15 @@ export default function FieldBoundaryMap({
   zoom = 6,
   onBoundaryChange,
   className = "",
+  variant = "panel",
+  clearSignal = 0,
 }: Props) {
+  const full = variant === "fullscreen";
+  // Phone drawing state: drawing in progress and how many corners so far.
+  const [drawing, setDrawing] = useState(false);
+  const [points, setPoints] = useState(0);
+  const [hasShape, setHasShape] = useState(false);
+  const [showCredits, setShowCredits] = useState(false);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const drawnLayerRef = useRef<L.Layer | null>(null);
@@ -186,7 +202,8 @@ export default function FieldBoundaryMap({
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
-    const map = L.map(mapContainerRef.current).setView(center, zoom);
+    // Phones: pinch to zoom, so no zoom buttons; credits sit behind an "i" button.
+    const map = L.map(mapContainerRef.current, { zoomControl: !full, attributionControl: !full }).setView(center, zoom);
     mapRef.current = map;
 
     const satelliteLayer = L.layerGroup([
@@ -200,7 +217,7 @@ export default function FieldBoundaryMap({
 
     // Geoman's drawing toolbar. No vertex limit — a field boundary can be
     // any shape, unlike leaflet-draw which crashed partway through.
-    (map as any).pm.addControls({
+    if (!full) (map as any).pm.addControls({
       position: "topleft",
       drawMarker: false,
       drawCircleMarker: false,
@@ -230,6 +247,9 @@ export default function FieldBoundaryMap({
       }
       drawnLayerRef.current = e.layer;
       emitBoundary(e.layer);
+      setHasShape(true);
+      // Phones: corners can be dragged straight away to adjust the shape.
+      if (full) e.layer.pm.enable({ allowSelfIntersection: false });
       e.layer.on("pm:edit", () => emitBoundary(e.layer));
       e.layer.on("pm:markerdragend", () => emitBoundary(e.layer));
       e.layer.on("pm:vertexadded", () => emitBoundary(e.layer));
@@ -240,7 +260,18 @@ export default function FieldBoundaryMap({
       if (e.layer === drawnLayerRef.current) {
         drawnLayerRef.current = null;
         onBoundaryChange(null);
+        setHasShape(false);
       }
+    });
+
+    map.on("pm:drawstart" as any, (e: any) => {
+      setDrawing(true);
+      setPoints(0);
+      e.workingLayer?.on("pm:vertexadded", () => setPoints((n) => n + 1));
+    });
+    map.on("pm:drawend" as any, () => {
+      setDrawing(false);
+      setPoints(0);
     });
 
     // Jump to the farmer's real location as soon as the map is ready,
@@ -264,6 +295,31 @@ export default function FieldBoundaryMap({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // "Redraw" on phones: remove the current shape.
+  useEffect(() => {
+    if (!clearSignal || !mapRef.current || !drawnLayerRef.current) return;
+    mapRef.current.removeLayer(drawnLayerRef.current);
+    drawnLayerRef.current = null;
+    setHasShape(false);
+    onBoundaryChange(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clearSignal]);
+
+  const pm = () => (mapRef.current as any)?.pm;
+  function startDrawing() {
+    pm()?.enableDraw("Polygon", { tooltips: false, snappable: false, allowSelfIntersection: false });
+  }
+  function undoPoint() {
+    pm()?.Draw?.Polygon?._removeLastVertex?.();
+    setPoints((n) => Math.max(0, n - 1));
+  }
+  function finishShape() {
+    pm()?.Draw?.Polygon?._finishShape?.();
+  }
+  function cancelDrawing() {
+    pm()?.disableDraw();
+  }
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -299,6 +355,164 @@ export default function FieldBoundaryMap({
   function flyTo(result: SearchResult) {
     mapRef.current?.setView([parseFloat(result.lat), parseFloat(result.lon)], 16);
     setSearchResults([]);
+  }
+
+  if (full) {
+    const floating = "bg-white text-ink shadow-e2 dark:bg-night-900 dark:text-parchment";
+    const notice = searchError ?? locationError ?? (locating ? "Finding your location…" : null);
+    return (
+      <div className={`relative overflow-hidden ${className}`}>
+        <div ref={mapContainerRef} className="absolute inset-0" />
+
+        {/* Search: one rounded bar, with location as its own round button. */}
+        <div className="absolute inset-x-3 top-3 z-[1000]">
+          <div className="flex gap-2">
+            <form onSubmit={handleSearch} className={`flex h-[52px] min-w-0 flex-1 items-center rounded-full pl-4 pr-1 ${floating}`} role="search">
+              <label htmlFor="field-map-search" className="sr-only">
+                Search for a town, district or place
+              </label>
+              <input
+                id="field-map-search"
+                type="search"
+                enterKeyHint="search"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                placeholder="Search a town or district"
+                className="!min-h-0 h-11 min-w-0 flex-1 bg-transparent text-base placeholder:text-ink/65 focus:outline-none dark:placeholder:text-parchment/65"
+              />
+              <button
+                type="submit"
+                disabled={searching}
+                aria-label="Search"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-growth-600 text-white active:bg-growth-700 disabled:opacity-60"
+              >
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                  <circle cx="8" cy="8" r="5.25" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="m12 12 3.5 3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </button>
+            </form>
+            <button
+              type="button"
+              onClick={() => locateUser(true)}
+              disabled={locating}
+              aria-label="Use my location"
+              className={`flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full active:scale-95 disabled:opacity-60 ${floating}`}
+            >
+              <svg width="20" height="20" viewBox="0 0 15 15" fill="none" aria-hidden>
+                <circle cx="7.5" cy="7.5" r="2" fill="currentColor" />
+                <circle cx="7.5" cy="7.5" r="4.5" stroke="currentColor" strokeWidth="1.2" />
+                <path d="M7.5 1v1.5M7.5 12.5V14M1 7.5h1.5M12.5 7.5H14" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+          {searchResults.length > 0 && (
+            <ul className={`mt-2 max-h-64 overflow-y-auto rounded-xl ${floating}`}>
+              {searchResults.map((r, i) => (
+                <li key={i}>
+                  <button
+                    type="button"
+                    onClick={() => flyTo(r)}
+                    className="min-h-12 w-full border-b border-canopy-900/5 px-4 py-3 text-left text-sm last:border-0 active:bg-parchment dark:border-white/5 dark:active:bg-white/5"
+                  >
+                    {r.display_name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {notice && searchResults.length === 0 && (
+            <p className="mt-2 rounded-xl bg-sky-100 px-4 py-3 text-sm text-sky-700 shadow-e2" role="status">
+              {notice}
+            </p>
+          )}
+          {drawing && (
+            <p className="m-in mt-2 rounded-xl bg-canopy-950/85 px-4 py-3 text-sm text-white shadow-e2 backdrop-blur-sm" role="status">
+              {points === 0
+                ? "Tap each corner of your field on the map."
+                : points < 3
+                  ? `${points} ${points === 1 ? "corner" : "corners"} placed. Keep tapping corners.`
+                  : `${points} corners. Tap the first corner again or press Finish.`}
+            </p>
+          )}
+        </div>
+
+        {/* Satellite or street map, under the search bar on the right. */}
+        {!drawing && (
+          <button
+            type="button"
+            onClick={toggleMapView}
+            className={`absolute right-3 top-[76px] z-[1000] h-11 rounded-full px-4 text-sm font-semibold active:scale-95 ${floating}`}
+          >
+            {mapView === "satellite" ? "Streets" : "Satellite"}
+          </button>
+        )}
+
+        {/* Map credits, required by the imagery providers. */}
+        <div className="absolute bottom-[calc(12px+env(safe-area-inset-bottom,0px))] left-3 z-[1000]">
+          {showCredits && (
+            <p className={`mb-2 max-w-[260px] rounded-lg px-3 py-2 text-xs ${floating}`}>
+              Imagery: Esri, Maxar, Earthstar Geographics and the GIS User Community. Street map: OpenStreetMap contributors.
+              Map library: Leaflet.
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowCredits((v) => !v)}
+            aria-label="Map credits"
+            aria-expanded={showCredits}
+            className="flex h-11 w-11 items-center justify-center"
+          >
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/85 text-xs font-semibold text-ink shadow-e1">i</span>
+          </button>
+        </div>
+
+        {/* Drawing controls, in the thumb zone at the bottom. */}
+        {!hasShape && (
+          <div className="absolute inset-x-0 bottom-[calc(16px+env(safe-area-inset-bottom,0px))] z-[1000] flex justify-center gap-2 px-16">
+            {!drawing ? (
+              <button
+                type="button"
+                onClick={startDrawing}
+                className="flex h-12 items-center gap-2 rounded-full bg-growth-600 px-6 text-base font-semibold text-white shadow-e3 active:bg-growth-700"
+              >
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+                  <path d="M3 14 6 4l9 3-3 8z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                  <circle cx="3" cy="14" r="1.6" fill="currentColor" />
+                  <circle cx="6" cy="4" r="1.6" fill="currentColor" />
+                  <circle cx="15" cy="7" r="1.6" fill="currentColor" />
+                  <circle cx="12" cy="15" r="1.6" fill="currentColor" />
+                </svg>
+                Draw boundary
+              </button>
+            ) : (
+              <>
+                <button type="button" onClick={cancelDrawing} className={`h-12 rounded-full px-4 text-sm font-semibold active:scale-95 ${floating}`}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={undoPoint}
+                  aria-label="Undo last point"
+                  disabled={points === 0}
+                  className={`h-12 rounded-full px-4 text-sm font-semibold active:scale-95 disabled:opacity-50 ${floating}`}
+                >
+                  Undo
+                </button>
+                <button
+                  type="button"
+                  onClick={finishShape}
+                  disabled={points < 3}
+                  className="h-12 rounded-full bg-growth-600 px-5 text-sm font-semibold text-white shadow-e3 active:bg-growth-700 disabled:opacity-50"
+                >
+                  Finish
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -369,7 +583,7 @@ export default function FieldBoundaryMap({
           onClick={toggleMapView}
           className="absolute right-3 top-3 z-[1000] rounded-lg bg-white dark:bg-night-900 px-3 py-2 text-xs font-semibold text-ink dark:text-parchment shadow-e2 hover:bg-parchment dark:hover:bg-white/5"
         >
-          {mapView === "satellite" ? "🗺️ Streets" : "🛰️ Satellite"}
+          {mapView === "satellite" ? "Streets" : "Satellite"}
         </button>
       </div>
 

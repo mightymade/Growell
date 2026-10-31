@@ -1,5 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { useSearchParams } from "react-router-dom";
+import { createPortal } from "react-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useIsPhone } from "../hooks/useIsPhone";
+import Modal from "../components/Modal";
 import { supabase } from "../lib/supabase";
 import { useFarmerProfile } from "../hooks/useFarmerProfile";
 import { updateProfile, requestEmailChange, changePassword, setAccountActive, changeProfilePhoto } from "../lib/api/account";
@@ -8,7 +11,7 @@ import { isPasswordValid } from "../lib/passwordPolicy";
 import { checkAndStartCooldown } from "../lib/rateLimit";
 import Avatar from "../components/Avatar";
 import PasswordRequirements from "../components/PasswordRequirements";
-import { LogoutIcon, CameraIcon, UserIcon, LockIcon, SunIcon } from "../components/icons";
+import { LogoutIcon, CameraIcon, UserIcon, LockIcon, SunIcon, ChevronRightIcon } from "../components/icons";
 import { SettingsSkeleton } from "../components/Skeleton";
 import ThemeToggle from "../components/ThemeToggle";
 import { BusyLabel } from "../components/Busy";
@@ -31,9 +34,17 @@ export default function Account() {
   const { profile, loading, refetch } = useFarmerProfile();
   // The open section lives in the URL (?section=password), so a refresh or
   // a shared link lands on the same section.
+  // Phones: each section is its own screen at /settings/<section>, and
+  // /settings itself is the list of sections.
   const [params, setParams] = useSearchParams();
-  const section = (SECTIONS.find((x) => x.id === params.get("section"))?.id ?? "profile") as Section;
-  const openSection = (id: Section) => setParams(id === "profile" ? {} : { section: id }, { replace: true });
+  const navigate = useNavigate();
+  const isPhone = useIsPhone();
+  const fromRoute = SECTIONS.find((x) => x.id === useParams().section)?.id;
+  const fromQuery = SECTIONS.find((x) => x.id === params.get("section"))?.id;
+  const section: Section | null = isPhone ? fromRoute ?? null : fromRoute ?? fromQuery ?? "profile";
+  const openSection = (id: Section) =>
+    isPhone ? navigate(`/settings/${id}`) : setParams(id === "profile" ? {} : { section: id }, { replace: true });
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -58,6 +69,10 @@ export default function Account() {
   const [deactivating, setDeactivating] = useState(false);
   const [deactivateError, setDeactivateError] = useState<string | null>(null);
   const [signOutError, setSignOutError] = useState<string | null>(null);
+
+  const profileDirty =
+    !!profile &&
+    (name !== profile.name || email !== profile.email || phone !== (profile.phone_number ?? "") || location !== (profile.location ?? ""));
 
   useEffect(() => {
     if (profile) {
@@ -173,13 +188,50 @@ export default function Account() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <h1 className="mb-5 font-display text-2xl font-semibold tracking-tight text-ink dark:text-parchment">Settings</h1>
+      <h1 className="mb-5 hidden font-display text-2xl font-semibold tracking-tight text-ink dark:text-parchment md:block">Settings</h1>
 
+      {/* Phones: the Settings screen is a list; each row opens its section. */}
+      {isPhone && !section && (
+        <div className="space-y-6">
+          <button
+            onClick={() => openSection("profile")}
+            className="flex w-full items-center gap-4 rounded-xl bg-white p-4 text-left shadow-e1 transition-colors active:bg-parchment dark:bg-night-900 dark:active:bg-white/5"
+          >
+            <Avatar avatarUrl={profile.avatar_url} name={profile.name} size={56} className="text-xl" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-base font-semibold text-ink dark:text-parchment">{profile.name}</span>
+              <span className="block truncate text-sm text-ink/70 dark:text-parchment/70">{profile.email}</span>
+            </span>
+            <span className="text-ink/40 dark:text-parchment/40" aria-hidden>
+              <ChevronRightIcon />
+            </span>
+          </button>
+          <nav aria-label="Settings sections" className="divide-y divide-canopy-900/5 overflow-hidden rounded-xl bg-white shadow-e1 dark:divide-white/5 dark:bg-night-900">
+            {SECTIONS.map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                onClick={() => openSection(id)}
+                className="flex h-14 w-full items-center gap-3 px-4 text-left text-base text-ink transition-colors active:bg-parchment dark:text-parchment dark:active:bg-white/5"
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-parchment text-ink/70 dark:bg-white/5 dark:text-parchment/70" aria-hidden>
+                  <Icon size={16} />
+                </span>
+                <span className="flex-1">{label}</span>
+                <span className="text-ink/40 dark:text-parchment/40" aria-hidden>
+                  <ChevronRightIcon />
+                </span>
+              </button>
+            ))}
+          </nav>
+        </div>
+      )}
+
+      {section && (
       <div className="grid grid-cols-1 gap-5 md:grid-cols-[220px_1fr] md:items-start">
-        {/* Section menu: a column on computers, a scrolling row on phones. */}
+        {/* Section menu: a column on computers. Phones use the list above. */}
         <nav
           aria-label="Settings sections"
-          className="m-scroll-hint -mx-1 flex gap-1 overflow-x-auto px-1 md:sticky md:top-4 md:mx-0 md:flex-col md:rounded-xl md:bg-white md:p-2 md:shadow-e1 md:dark:bg-night-900"
+          className="hidden md:sticky md:top-4 md:flex md:flex-col md:gap-1 md:rounded-xl md:bg-white md:p-2 md:shadow-e1 md:dark:bg-night-900"
         >
           {SECTIONS.map(({ id, label, Icon }) => {
             const active = section === id;
@@ -202,16 +254,16 @@ export default function Account() {
         </nav>
 
         {/* Keyed by section so switching sections cross-fades the panel. */}
-        <div key={section} className="m-page rounded-xl bg-white p-5 shadow-e1 dark:bg-night-900 sm:p-7">
+        <div key={section} className="m-page rounded-xl bg-white p-4 shadow-e1 dark:bg-night-900 sm:p-7">
           {section === "profile" && (
-            <form onSubmit={handleSaveProfile} noValidate>
+            <form id="settings-profile-form" onSubmit={handleSaveProfile} noValidate className={isPhone && profileDirty ? "pb-24" : undefined}>
               <PanelHeading title="Profile" note="Your name and how Growell can reach you." />
 
-              <div className="mb-7 flex flex-wrap items-center gap-5">
+              <div className="mb-7 flex flex-col items-center gap-4 text-center md:flex-row md:flex-wrap md:gap-5 md:text-left">
                 <div className="relative">
                   <Avatar avatarUrl={profile.avatar_url} name={profile.name} size={88} className="text-3xl" />
                   <label
-                    className={`absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-growth-600 text-white shadow ring-[3px] ring-white dark:ring-night-900 ${
+                    className={`absolute bottom-0 right-0 hidden h-8 w-8 items-center justify-center rounded-full bg-growth-600 text-white shadow ring-[3px] ring-white dark:ring-night-900 md:flex ${
                       uploadingAvatar ? "opacity-50" : "cursor-pointer hover:bg-growth-700"
                     }`}
                     title="Change photo"
@@ -222,11 +274,14 @@ export default function Account() {
                 </div>
                 <div>
                   <label
-                    className={`inline-flex h-10 items-center rounded-lg border border-canopy-900/12 px-4 text-sm font-medium text-ink transition-colors dark:border-white/15 dark:text-parchment ${
+                    className={`inline-flex h-11 items-center gap-2 rounded-lg border border-canopy-900/12 px-4 text-sm font-medium text-ink transition-colors active:bg-parchment dark:border-white/15 dark:text-parchment md:h-10 ${
                       uploadingAvatar ? "opacity-50" : "cursor-pointer hover:bg-parchment dark:hover:bg-white/5"
                     }`}
                   >
-                    <BusyLabel busy={uploadingAvatar} label="Upload new photo" busyLabel="Uploading…" />
+                    <span className="md:hidden" aria-hidden>
+                      <CameraIcon size={15} />
+                    </span>
+                    <BusyLabel busy={uploadingAvatar} label={isPhone ? "Change photo" : "Upload new photo"} busyLabel="Uploading…" />
                     <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePickAvatar} disabled={uploadingAvatar} className="hidden" />
                   </label>
                   {avatarError ? (
@@ -283,12 +338,39 @@ export default function Account() {
                 <Notice tone="info">Confirmation link sent to your new email. The change takes effect once you open it.</Notice>
               )}
 
-              <div className="mt-7 flex items-center gap-3 border-t border-canopy-900/5 pt-5 dark:border-white/5">
+              <div className="mt-7 hidden items-center gap-3 border-t border-canopy-900/5 pt-5 dark:border-white/5 md:flex">
                 <button type="submit" disabled={savingProfile} className={primaryButton}>
                   <BusyLabel busy={savingProfile} label="Save changes" busyLabel="Saving…" />
                 </button>
                 {profileSaved && !emailChangePending && <span role="status" className="m-in text-sm text-growth-700 dark:text-growth-500">Saved</span>}
               </div>
+
+              {/* Phones: a Save bar floats above the tab bar once something has
+                  changed. It is rendered on the page body (outside the animated
+                  page wrapper, which would otherwise pin it to the card) and
+                  submits this form through its id. */}
+              {isPhone &&
+                (profileDirty || savingProfile) &&
+                createPortal(
+                  <div className="m-in phone-above-tabbar fixed inset-x-4 z-30 rounded-xl bg-white p-3 shadow-e3 dark:bg-night-900">
+                    <button type="submit" form="settings-profile-form" disabled={savingProfile} className={`${primaryButton} h-12 w-full text-base`}>
+                      <BusyLabel busy={savingProfile} label="Save changes" busyLabel="Saving…" />
+                    </button>
+                  </div>,
+                  document.body,
+                )}
+              {isPhone &&
+                profileSaved &&
+                !emailChangePending &&
+                createPortal(
+                  <span
+                    role="status"
+                    className="m-in fixed inset-x-0 top-[calc(var(--mtop)+var(--safe-top)+12px)] z-30 mx-auto w-fit rounded-full bg-growth-600 px-4 py-2 text-sm font-medium text-white shadow-e2"
+                  >
+                    Saved
+                  </span>,
+                  document.body,
+                )}
             </form>
           )}
 
@@ -326,8 +408,8 @@ export default function Account() {
 
               {passwordError && <Notice tone="error">{passwordError}</Notice>}
 
-              <div className="mt-7 flex items-center gap-3 border-t border-canopy-900/5 pt-5 dark:border-white/5">
-                <button type="submit" disabled={savingPassword} className={primaryButton}>
+              <div className="mt-7 flex flex-wrap items-center gap-3 border-t border-canopy-900/5 pt-5 dark:border-white/5">
+                <button type="submit" disabled={savingPassword} className={`${primaryButton} max-md:h-12 max-md:w-full max-md:text-base`}>
                   <BusyLabel busy={savingPassword} label="Update password" busyLabel="Updating…" />
                 </button>
                 {passwordSaved && <span role="status" className="m-in text-sm text-growth-700 dark:text-growth-500">Password updated</span>}
@@ -352,8 +434,8 @@ export default function Account() {
                   <p className="mt-1 text-sm text-ink/65 dark:text-parchment/65">Signed in as {profile.email}</p>
                 </div>
                 <button
-                  onClick={handleSignOut}
-                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-canopy-900/12 px-4 text-sm font-medium text-ink transition-colors hover:bg-parchment dark:border-white/15 dark:text-parchment dark:hover:bg-white/5"
+                  onClick={() => (isPhone ? setConfirmingSignOut(true) : handleSignOut())}
+                  className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-canopy-900/12 px-4 text-base font-medium text-ink transition-colors hover:bg-parchment active:bg-parchment dark:border-white/15 dark:text-parchment dark:hover:bg-white/5 md:h-10 md:w-auto md:text-sm"
                 >
                   <LogoutIcon size={15} />
                   Sign out
@@ -363,14 +445,14 @@ export default function Account() {
 
               <div className="pt-6">
                 <p className="text-sm font-medium text-ink dark:text-parchment">Deactivate account</p>
-                {!confirmingDeactivate ? (
+                {!confirmingDeactivate || isPhone ? (
                   <>
                     <p className="mt-1 max-w-lg text-sm text-ink/65 dark:text-parchment/65">
                       Hides your fields and data until you log in again and reactivate. Nothing is deleted.
                     </p>
                     <button
                       onClick={() => setConfirmingDeactivate(true)}
-                      className="mt-4 inline-flex h-10 items-center rounded-lg border border-laterite-700/25 px-4 text-sm font-medium text-laterite-700 transition-colors hover:bg-laterite-50"
+                      className="mt-4 inline-flex h-12 w-full items-center justify-center rounded-lg border border-laterite-700/25 px-4 text-base font-medium text-laterite-700 transition-colors hover:bg-laterite-50 active:bg-laterite-50 md:h-10 md:w-auto md:text-sm"
                     >
                       Deactivate account
                     </button>
@@ -405,15 +487,55 @@ export default function Account() {
           )}
         </div>
       </div>
+      )}
+
+      {/* Phones: sign out and deactivate are confirmed in bottom sheets. */}
+      <Modal
+        open={isPhone && confirmingSignOut}
+        onClose={() => setConfirmingSignOut(false)}
+        role="alertdialog"
+        title="Sign out of Growell?"
+        description={`You can sign back in any time as ${profile.email}.`}
+        footer={
+          <>
+            <button onClick={() => setConfirmingSignOut(false)} data-autofocus className="rounded-lg border border-canopy-900/15 text-base font-medium text-ink dark:border-white/15 dark:text-parchment">
+              Stay signed in
+            </button>
+            <button onClick={handleSignOut} className="rounded-lg bg-ink text-base font-semibold text-white dark:bg-parchment dark:text-ink">
+              Sign out
+            </button>
+          </>
+        }
+      />
+      <Modal
+        open={isPhone && confirmingDeactivate}
+        onClose={() => !deactivating && setConfirmingDeactivate(false)}
+        role="alertdialog"
+        title="Deactivate your account?"
+        description="You'll be signed out straight away. Log back in any time to reactivate, and your fields and history will be exactly as you left them."
+        footer={
+          <>
+            <button onClick={() => setConfirmingDeactivate(false)} disabled={deactivating} data-autofocus className="rounded-lg border border-canopy-900/15 text-base font-medium text-ink disabled:opacity-50 dark:border-white/15 dark:text-parchment">
+              Keep my account
+            </button>
+            <button onClick={handleDeactivate} disabled={deactivating} className="rounded-lg bg-laterite-700 text-base font-semibold text-white disabled:opacity-50">
+              <BusyLabel busy={deactivating} label="Yes, deactivate" busyLabel="Deactivating…" />
+            </button>
+          </>
+        }
+      >
+        {deactivateError && <p role="alert" className="pb-2 text-sm text-laterite-700">{deactivateError}</p>}
+      </Modal>
     </div>
   );
 }
 
 function PanelHeading({ title, note }: { title: string; note: string }) {
   return (
-    <div className="mb-6">
-      <h2 className="font-display text-lg font-semibold text-ink dark:text-parchment">{title}</h2>
-      <p className="mt-1 text-sm text-ink/65 dark:text-parchment/65">{note}</p>
+    <div className="mb-5 md:mb-6">
+      {/* Phones show the section name in the top bar, so only the note here. */}
+      <h2 className="hidden font-display text-lg font-semibold text-ink dark:text-parchment md:block">{title}</h2>
+      <p className="text-sm text-ink/65 dark:text-parchment/65 md:mt-1">{note}</p>
     </div>
   );
 }

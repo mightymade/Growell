@@ -168,46 +168,6 @@ button:active,
   .animate-fade-up { animation: none !important; opacity: 1 !important; transform: none !important; }
 }
 
-/* Season scrubber — a restyled native range input, since it gives the
-   most reliable drag/keyboard/touch behavior for free. Track and thumb
-   styled per-browser (no single shorthand covers both engines). */
-.season-slider {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 6px;
-  border-radius: 999px;
-  background: linear-gradient(to right, #22A159 var(--slider-fill, 50%), #E6E9E7 var(--slider-fill, 50%));
-  outline: none;
-  cursor: pointer;
-}
-.season-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #fff;
-  border: 3px solid #15884A;
-  box-shadow: 0 2px 6px rgba(22, 36, 28, 0.3);
-  cursor: grab;
-}
-.season-slider::-webkit-slider-thumb:active { cursor: grabbing; }
-.season-slider::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #fff;
-  border: 3px solid #15884A;
-  box-shadow: 0 2px 6px rgba(22, 36, 28, 0.3);
-  cursor: grab;
-}
-.season-slider::-moz-range-track {
-  height: 6px;
-  border-radius: 999px;
-  background: transparent;
-}
-
 /* Leaflet's default zoom control and Geoman's draw/edit toolbar are
    plain white squares with hard borders — restyle the chrome (radius,
    shadow, hover tint) without touching width/height/icon backgrounds,
@@ -305,28 +265,27 @@ input:autofill {
   color: #16241C;
 }
 
-/* Season timelapse. Pictures cross-fade; the photo is shown in its real
-   colours, nothing is tinted. */
-.timelapse-frame {
+/* Field health map. The crop health picture fades in over the photo, and
+   the outline pulses when the latest reading was flagged as a drop. */
+.fieldmap-picture {
   transition: opacity 450ms ease;
 }
-.timelapse-flagged {
-  animation: timelapse-pulse 1.4s ease-in-out infinite;
+.fieldmap-flagged {
+  animation: fieldmap-pulse 1.4s ease-in-out infinite;
 }
-@keyframes timelapse-pulse {
+@keyframes fieldmap-pulse {
   0%, 100% { stroke-opacity: 1; }
   50% { stroke-opacity: 0.35; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .timelapse-frame { transition: none; }
-  .timelapse-flagged { animation: none; }
+  .fieldmap-picture { transition: none; }
+  .fieldmap-flagged { animation: none; }
 }
-.season-slider:disabled { cursor: default; opacity: 0.5; }
-.timelapse-outline {
+.fieldmap-outline {
   transition: fill 600ms ease, fill-opacity 400ms ease, stroke 400ms ease;
 }
 @media (prefers-reduced-motion: reduce) {
-  .timelapse-outline { transition: none; }
+  .fieldmap-outline { transition: none; }
 }
 
 /* Dark mode tints. The light pastel fills (alert banners, notices, badges,
@@ -464,4 +423,85 @@ button:disabled { cursor: not-allowed; }
     overflow: hidden;
     height: 100%;
   }
+}
+
+/* Inter's clearer letter shapes: single-storey a (ss01 style alternates)
+   and open digits (cv11), easier to read at small sizes. Numbers that sit
+   in columns or count up also use the tabular-nums utility. */
+body {
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* On phones dialogs are bottom sheets: they slide up from the bottom edge
+   instead of scaling in the middle. */
+@keyframes m-sheet { from { transform: translateY(100%); } to { transform: none; } }
+@media (max-width: 767px) {
+  .m-dialog { animation: m-sheet 280ms var(--ease-enter) both; }
+  .m-dialog-out { animation: m-sheet 200ms var(--ease-exit) reverse both; }
+}
+
+/* ---- Phone app shell ------------------------------------------------------
+   Below 768px the top bar and the bottom tab bar are pinned to the screen
+   and the page scrolls between them. These heights are used everywhere
+   something must clear the bars: page padding, toasts, sticky buttons. */
+:root {
+  --mtop: 56px;
+  --mtab: 64px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (max-width: 767px) {
+  .phone-main {
+    padding-top: calc(var(--mtop) + var(--safe-top) + 16px);
+    padding-bottom: calc(var(--mtab) + var(--safe-bottom) + 24px);
+  }
+  .phone-main.phone-no-tabbar {
+    padding-bottom: calc(var(--safe-bottom) + 24px);
+  }
+  /* Things that float above the tab bar (toasts, sticky save bars). */
+  .phone-above-tabbar {
+    bottom: calc(var(--mtab) + var(--safe-bottom) + 12px);
+  }
+}
+.phone-topbar { padding-top: var(--safe-top); height: calc(var(--mtop) + var(--safe-top)); }
+.phone-tabbar { padding-bottom: var(--safe-bottom); height: calc(var(--mtab) + var(--safe-bottom)); }
+
+/* Phones: every text box is 48px tall with 16px text, an easy thumb
+   target that never makes the browser zoom in. */
+@media (max-width: 767px) {
+  input[type="text"], input[type="email"], input[type="password"], input[type="tel"],
+  input[type="search"], input[type="number"], input[type="date"], input:not([type]), select, textarea {
+    font-size: 16px;
+  }
+  input[type="text"], input[type="email"], input[type="password"], input[type="tel"],
+  input[type="search"], input[type="number"], input[type="date"], input:not([type]), select {
+    min-height: 48px;
+  }
+}
+
+/* ---- Landing page motion ---------------------------------------------------
+   Transform and opacity only. Under reduced motion everything simply
+   appears in place. */
+@keyframes lp-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes lp-rise-lg { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+@keyframes lp-pop { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes lp-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+.lp-rise { animation: lp-rise 500ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.lp-rise-lg { animation: lp-rise-lg 700ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.lp-pop { animation: lp-pop 400ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.lp-float { animation: lp-float 7s ease-in-out infinite; }
+.lp-paused .lp-float { animation-play-state: paused; }
+/* Scroll-triggered pieces start hidden and are switched on with .lp-on. */
+.lp-wait { opacity: 0; transform: translateY(12px); transition: opacity 500ms cubic-bezier(0.16, 1, 0.3, 1), transform 500ms cubic-bezier(0.16, 1, 0.3, 1); }
+.lp-wait.lp-on { opacity: 1; transform: none; }
+.lp-wait-lg { opacity: 0; transform: translateY(24px); transition: opacity 700ms cubic-bezier(0.16, 1, 0.3, 1), transform 700ms cubic-bezier(0.16, 1, 0.3, 1); }
+.lp-wait-lg.lp-on { opacity: 1; transform: none; }
+.lp-draw { transform: scaleY(0); transform-origin: top; transition: transform 700ms cubic-bezier(0.16, 1, 0.3, 1); }
+.lp-draw.lp-on { transform: scaleY(1); }
+@media (prefers-reduced-motion: reduce) {
+  .lp-rise, .lp-rise-lg, .lp-pop { animation: m-fade 120ms linear both !important; animation-delay: 0ms !important; }
+  .lp-float { animation: none; }
+  .lp-wait, .lp-wait-lg, .lp-draw { opacity: 1; transform: none; transition: none; }
 }

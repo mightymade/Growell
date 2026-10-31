@@ -78,6 +78,7 @@ export default function Login() {
             type="email"
             required
             autoComplete="email"
+            enterKeyHint="next"
             inputMode="email"
             placeholder="Enter your email"
             value={email}
@@ -86,9 +87,13 @@ export default function Login() {
           />
         </div>
 
-        <div className="mb-2 flex items-baseline justify-between">
+        <div className="mb-2 flex items-center justify-between">
           <label htmlFor="login-password" className="block text-sm font-medium text-ink/80">Password</label>
-          <button type="button" onClick={handleForgotPassword} className="text-sm font-medium text-growth-700 hover:underline">
+          <button
+            type="button"
+            onClick={handleForgotPassword}
+            className="-my-3 -mr-1 inline-flex min-h-11 items-center px-1 text-sm font-medium text-growth-700 hover:underline md:my-0 md:mr-0 md:min-h-0 md:px-0"
+          >
             Forgot password?
           </button>
         </div>
@@ -101,6 +106,7 @@ export default function Login() {
             type={showPassword ? "text" : "password"}
             required
             autoComplete="current-password"
+            enterKeyHint="go"
             placeholder="Enter your password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}

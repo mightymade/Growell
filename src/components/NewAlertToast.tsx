@@ -39,7 +39,7 @@ export default function NewAlertToast({
   }, [toast, paused, dismiss]);
 
   return (
-    <div aria-live="polite" className="pointer-events-none fixed inset-x-4 bottom-20 z-[1000] flex justify-end md:bottom-6 md:right-6 md:left-auto">
+    <div aria-live="polite" className="phone-above-tabbar pointer-events-none fixed inset-x-4 z-[1000] flex justify-end md:bottom-6 md:right-6 md:left-auto">
       {toast && (
         <div
           key={toast.key}

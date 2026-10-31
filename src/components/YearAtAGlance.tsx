@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { Field } from "../lib/types";
 import { useFarmSeason } from "../hooks/useFarmSeason";
 import { KIND_LABEL, monthKinds } from "../lib/seasons";
@@ -10,6 +11,15 @@ import { KIND_CLASS, KIND_SHORT, MONTHS } from "../lib/seasonUi";
  */
 export default function YearAtAGlance({ fields }: { fields: Field[] }) {
   const { zone, now, phase } = useFarmSeason(fields);
+  const stripRef = useRef<HTMLDivElement>(null);
+  // Phones show the months as a sideways strip: start it with this month in view.
+  useEffect(() => {
+    const strip = stripRef.current;
+    const current = strip?.querySelector<HTMLElement>('[aria-current="date"]');
+    if (strip && current && strip.scrollWidth > strip.clientWidth) {
+      strip.scrollLeft = Math.max(0, current.offsetLeft - strip.offsetLeft - 56);
+    }
+  }, [phase]);
   if (!phase) return null;
 
   const kinds = monthKinds(zone);
@@ -22,7 +32,13 @@ export default function YearAtAGlance({ fields }: { fields: Field[] }) {
         <p className="text-xs text-ink/70 dark:text-parchment/70">Today: {today}</p>
       </div>
 
-      <div className="mt-5 grid grid-cols-6 gap-2 sm:grid-cols-12 sm:gap-2" role="list" aria-label="What each month is for">
+      <div className="relative">
+      <div
+        ref={stripRef}
+        className="-mx-5 mt-2 flex snap-x snap-mandatory scroll-px-5 gap-2 overflow-x-auto px-5 pb-2 pt-4 [scrollbar-width:none] md:mx-0 md:mt-5 md:grid md:grid-cols-12 md:overflow-visible md:px-0 md:pb-0 md:pt-0 [&::-webkit-scrollbar]:hidden"
+        role="list"
+        aria-label="What each month is for"
+      >
         {MONTHS.map((m, i) => {
           const isNow = i === now.getMonth();
           const k = kinds[i];
@@ -32,7 +48,7 @@ export default function YearAtAGlance({ fields }: { fields: Field[] }) {
               role="listitem"
               aria-current={isNow ? "date" : undefined}
               aria-label={`${m}: ${KIND_LABEL[k]}${isNow ? " (this month)" : ""}`}
-              className={`relative rounded-lg px-1 py-3 text-center ${KIND_CLASS[k]} ${isNow ? "ring-2 ring-ink ring-offset-2" : ""}`}
+              className={`relative w-[72px] shrink-0 snap-start rounded-lg px-1 py-3 text-center md:w-auto ${KIND_CLASS[k]} ${isNow ? "ring-2 ring-ink ring-offset-2 dark:ring-parchment dark:ring-offset-night-900" : ""}`}
             >
               {isNow && (
                 <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-ink px-2 py-px text-xs font-bold uppercase tracking-wide text-white">
@@ -45,7 +61,12 @@ export default function YearAtAGlance({ fields }: { fields: Field[] }) {
           );
         })}
       </div>
-
+      {/* Fade at the right edge on phones: more months continue that way. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 -right-5 w-10 bg-gradient-to-l from-white to-transparent dark:from-night-900 md:hidden"
+      />
+      </div>
     </section>
   );
 }

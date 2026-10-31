@@ -36,8 +36,10 @@ export default {
         panel: "240ms",
       },
       fontFamily: {
-        display: ["\"Space Grotesk\"", "sans-serif"],
-        body: ["\"Public Sans\"", "sans-serif"],
+        // One family for the whole app. Headings differ from body text by
+        // size and weight only.
+        display: ["Inter", "system-ui", "-apple-system", "\"Segoe UI\"", "Roboto", "sans-serif"],
+        body: ["Inter", "system-ui", "-apple-system", "\"Segoe UI\"", "Roboto", "sans-serif"],
       },
       colors: {
         canopy: {

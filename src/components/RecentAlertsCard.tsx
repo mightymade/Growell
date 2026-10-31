@@ -62,7 +62,7 @@ export default function RecentAlertsCard({ alerts, openCount, onOpenAlert, onVie
                 <button
                   key={a.id}
                   onClick={() => onOpenAlert(a)}
-                  className="flex w-full items-start gap-3 rounded-lg px-2 py-3 text-left hover:bg-parchment dark:hover:bg-white/5"
+                  className="flex w-full items-start gap-3 rounded-lg px-2 py-3 text-left hover:bg-parchment active:bg-parchment dark:hover:bg-white/5 dark:active:bg-white/5"
                 >
                   <span
                     className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
@@ -98,7 +98,7 @@ export default function RecentAlertsCard({ alerts, openCount, onOpenAlert, onVie
           </div>
           <button
             onClick={onViewAll}
-            className="mt-auto rounded-lg border border-canopy-900/15 dark:border-white/15 py-3 text-sm font-semibold text-growth-700 hover:bg-parchment dark:hover:bg-white/5"
+            className="mt-3 h-12 rounded-lg border border-canopy-900/15 text-sm font-semibold text-growth-700 hover:bg-parchment active:bg-parchment dark:border-white/15 dark:hover:bg-white/5 dark:active:bg-white/5 md:mt-auto md:h-auto md:py-3"
           >
             View all alerts
           </button>

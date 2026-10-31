@@ -29,13 +29,21 @@ export const SEVERITY_DOT: Record<string, string> = {
   high: "bg-laterite-700",
 };
 
-export function formatAlertDate(iso: string) {
-  return new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+/** Shown wherever a date is missing or cannot be read, instead of "Invalid Date". */
+export const UNKNOWN_DATE = "Date unknown";
+
+export function formatAlertDate(iso: string | null | undefined) {
+  if (!iso) return UNKNOWN_DATE;
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return UNKNOWN_DATE;
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 
 /** "just now", "5 min ago", "3 h ago", "yesterday", "4 days ago", then a date. */
-export function timeAgo(iso: string, now = Date.now()): string {
-  const diff = Math.max(0, now - new Date(iso).getTime());
+export function timeAgo(iso: string | null | undefined, now = Date.now()): string {
+  const t = iso ? new Date(iso).getTime() : NaN;
+  if (Number.isNaN(t)) return UNKNOWN_DATE;
+  const diff = Math.max(0, now - t);
   const min = Math.round(diff / 60_000);
   if (min < 1) return "just now";
   if (min < 60) return `${min} min ago`;
@@ -44,5 +52,5 @@ export function timeAgo(iso: string, now = Date.now()): string {
   const d = Math.round(h / 24);
   if (d === 1) return "yesterday";
   if (d < 7) return `${d} days ago`;
-  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  return new Date(t).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }

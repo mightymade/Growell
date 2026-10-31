@@ -19,7 +19,10 @@ export default function FieldAlertHistory({ alerts, fieldId }: { alerts: AlertWi
       <div className="flex items-center justify-between gap-3">
         <p className="font-display text-sm font-semibold text-ink dark:text-parchment">Alert history</p>
         {alerts.length > 0 && (
-          <button onClick={toAlerts} className="text-xs font-medium text-growth-700 hover:underline dark:text-growth-500">
+          <button
+            onClick={toAlerts}
+            className="-my-3 -mr-3 flex h-11 items-center rounded-lg px-3 text-sm font-medium text-growth-700 hover:underline active:bg-growth-50 dark:text-growth-500 md:-my-0 md:-mr-0 md:h-auto md:px-0 md:text-xs"
+          >
             {open > 0 ? `Answer ${open} in Alerts` : "Open in Alerts"}
           </button>
         )}
@@ -35,7 +38,7 @@ export default function FieldAlertHistory({ alerts, fieldId }: { alerts: AlertWi
             <li key={a.id}>
               <button
                 onClick={() => navigate(`/alerts?field=${fieldId}&alert=${a.id}`)}
-                className="flex w-full items-center gap-3 py-3 text-left hover:bg-parchment/60 dark:hover:bg-white/5"
+                className="flex min-h-12 w-full items-center gap-3 py-3 text-left hover:bg-parchment/60 active:bg-parchment dark:hover:bg-white/5 dark:active:bg-white/5"
               >
                 <span className={`w-[72px] shrink-0 rounded-full py-1 text-center text-xs font-medium ${severityStyle[a.severity]}`}>
                   {SEVERITY_LABEL[a.severity]}

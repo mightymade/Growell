@@ -5,6 +5,7 @@ import { supabase } from "./lib/supabase";
 import { clearCache, claimCacheFor } from "./lib/queryClient";
 import Splash from "./pages/Splash";
 import AppLayout from "./components/AppLayout";
+import { useIsPhone } from "./hooks/useIsPhone";
 
 // Each page is its own download. A signed-in farmer never downloads the
 // Landing, Login or Signup code, and nobody downloads the map or chart code
@@ -15,6 +16,12 @@ const Login = lazy(() => import("./pages/Login"));
 const Signup = lazy(() => import("./pages/Signup"));
 const Home = lazy(() => import("./pages/Home"));
 const FieldDetail = lazy(() => import("./pages/FieldDetail"));
+const FieldsList = lazy(() => import("./pages/FieldsList"));
+
+/** The Fields tab: a list of fields on phones, the last viewed field on bigger screens. */
+function FieldsIndex() {
+  return useIsPhone() ? <FieldsList /> : <FieldDetail />;
+}
 const AlertsPage = lazy(() => import("./pages/AlertsPage"));
 const AddField = lazy(() => import("./pages/AddField"));
 const Account = lazy(() => import("./pages/Account"));
@@ -54,10 +61,11 @@ export default function App() {
               <Route element={<AppLayout />}>
                 <Route path="/" element={<Navigate to="/home" replace />} />
                 <Route path="/home" element={<Home />} />
-                <Route path="/fields" element={<FieldDetail />} />
+                <Route path="/fields" element={<FieldsIndex />} />
                 <Route path="/fields/:fieldId" element={<FieldDetail />} />
                 <Route path="/alerts" element={<AlertsPage />} />
                 <Route path="/settings" element={<Account />} />
+                <Route path="/settings/:section" element={<Account />} />
               </Route>
 
               <Route path="/login" element={<Navigate to="/" replace />} />
