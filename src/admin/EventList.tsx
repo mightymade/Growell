@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { AuditEvent } from "./api";
 import { EventIcon, EventSentence, actionInfo, actorLabel, describeText } from "./events";
 import { clockTime, dayHeading, dayKey, exactTime, fullDate, hectares, relativeTime } from "./format";
@@ -98,6 +98,8 @@ const KEY_WORDS: Record<string, string> = {
   new_images: "New images",
   failures: "Failures",
   alerts_created: "Alerts created",
+  notifications_sent: "Notifications sent",
+  farmers: "Farmers",
   duration_ms: "Took",
   backfilled: "Reconstructed",
 };
@@ -112,6 +114,57 @@ function show(key: string, v: unknown): ReactNode {
   if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) return fullDate(v);
   if (typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f-]{27}$/.test(v)) return <code className="break-all text-xs">{v}</code>;
   return String(v);
+}
+
+/**
+ * Shows only the events that fit whole in the space it is given, so the
+ * list never needs a scrollbar. Tells the parent how many fit, so paging
+ * can start the next page right after the last one shown.
+ */
+export function FitEventList({
+  events,
+  compact = false,
+  onFit,
+  className = "",
+}: {
+  events: AuditEvent[];
+  compact?: boolean;
+  onFit?: (n: number) => void;
+  className?: string;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState<number | null>(null);
+  const [height, setHeight] = useState(0);
+  const onFitRef = useRef(onFit);
+  onFitRef.current = onFit;
+
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setHeight(el.clientHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  // New size or new events: show them all again, then measure.
+  useLayoutEffect(() => setFit(null), [height, events]);
+  useLayoutEffect(() => {
+    if (fit !== null || !box.current) return;
+    const bottom = box.current.getBoundingClientRect().bottom;
+    let n = 0;
+    for (const li of box.current.querySelectorAll("ol > li")) {
+      if (li.getBoundingClientRect().bottom <= bottom + 0.5) n++;
+      else break;
+    }
+    const shown = Math.max(1, Math.min(n, events.length));
+    setFit(shown);
+    onFitRef.current?.(shown);
+  });
+
+  return (
+    <div ref={box} className={`min-h-0 flex-1 overflow-hidden ${className}`}>
+      <EventList events={fit === null ? events : events.slice(0, fit)} compact={compact} />
+    </div>
+  );
 }
 
 export function EventDetail({ event, onClose }: { event: AuditEvent | null; onClose: () => void }) {

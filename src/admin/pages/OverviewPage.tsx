@@ -1,10 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { Link } from "react-router-dom";
 import { adminApi, type AuditEvent, type Overview } from "../api";
 import { CountChart } from "../charts";
-import { EventList } from "../EventList";
+import { FitEventList } from "../EventList";
 import { count, exactTime, hectares, relativeTime, shortDate } from "../format";
 import { ErrorState, InfoTip, PageHeader, StatCompact, card } from "../ui";
 import { Skeleton, LoadingRegion } from "../../components/Skeleton";
@@ -105,48 +104,12 @@ export default function OverviewPage() {
               ) : latest.data.rows.length === 0 ? (
                 <p className="px-4 py-8 text-sm text-ink/70 dark:text-parchment/70">Nothing has happened yet.</p>
               ) : (
-                <LatestSummary events={latest.data.rows.slice(0, isPhone ? 8 : 20)} />
+                <FitEventList events={latest.data.rows.slice(0, isPhone ? 8 : 20)} compact className="pb-2" />
               )}
             </section>
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-/**
- * A summary, not a list to scroll: shows only the newest events that fit
- * whole in the card. "View all" opens the full list.
- */
-function LatestSummary({ events }: { events: AuditEvent[] }) {
-  const box = useRef<HTMLDivElement>(null);
-  const [fit, setFit] = useState<number | null>(null);
-  const [height, setHeight] = useState(0);
-
-  useEffect(() => {
-    const el = box.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setHeight(el.clientHeight));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  // New size or new events: show them all again, then measure.
-  useLayoutEffect(() => setFit(null), [height, events]);
-  useLayoutEffect(() => {
-    if (fit !== null || !box.current) return;
-    const bottom = box.current.getBoundingClientRect().bottom;
-    let n = 0;
-    for (const li of box.current.querySelectorAll("ol > li")) {
-      if (li.getBoundingClientRect().bottom <= bottom + 0.5) n++;
-      else break;
-    }
-    setFit(Math.max(1, n));
-  });
-
-  return (
-    <div ref={box} className="min-h-0 flex-1 overflow-hidden pb-2">
-      <EventList events={fit === null ? events : events.slice(0, fit)} compact />
     </div>
   );
 }

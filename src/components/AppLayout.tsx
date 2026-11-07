@@ -12,6 +12,7 @@ import MobileTopBar from "./MobileTopBar";
 import DeactivatedGate from "./DeactivatedGate";
 import IdleWarningModal from "./IdleWarningModal";
 import ConsentGate from "./ConsentGate";
+import { usePendingPhoto } from "../hooks/usePendingPhoto";
 import { PageSkeleton } from "./Skeleton";
 import { useIdleLogout } from "../hooks/useIdleLogout";
 
@@ -27,6 +28,7 @@ export type LayoutContext = {
  * chrome). Fetches the field list once here rather than in each page.
  */
 export default function AppLayout() {
+  usePendingPhoto();
   const navigate = useNavigate();
   const location = useLocation();
   const { profile, refetch: refetchProfile } = useFarmerProfile();

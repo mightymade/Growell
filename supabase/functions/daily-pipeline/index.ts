@@ -20,6 +20,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchNdviTimeSeries, polygonCentroid } from "../_shared/sentinel.ts";
 import { fetchWeatherHistory } from "../_shared/weather.ts";
 import { computeGrowthStage } from "../_shared/cropStages.ts";
+import { notifyFarmer } from "../_shared/notify.ts";
 import { saveNdviReadings, saveWeatherReadings } from "../_shared/store.ts";
 
 const supabase = createClient(
@@ -42,6 +43,9 @@ type Field = {
   boundary_coords: GeoJSON.Polygon;
   crop_type: string | null;
   planted_date: string | null;
+  farmer_id: string;
+  /** Days to harvest for a crop that isn't on the list (patch_012). */
+  maturity_days?: number | null;
   area_hectares: number | null;
 };
 
@@ -111,7 +115,8 @@ Deno.serve(async (req) => {
   // but are never checked again.
   const { data: fields, error } = await supabase
     .from("fields")
-    .select("id, field_name, boundary_coords, crop_type, planted_date, area_hectares")
+    // "*" so a database without patch_012's maturity_days still works.
+    .select("*")
     .is("deleted_at", null);
   if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 
@@ -119,6 +124,7 @@ Deno.serve(async (req) => {
   let newImages = 0;
   let failures = 0;
   let alertsCreated = 0;
+  let pushesSent = 0;
   const failed = async (field: Field, reason: string) => {
     failures++;
     await logEvent("pipeline.check_failed", { reason: reason.slice(0, 300) }, field);
@@ -250,7 +256,7 @@ Deno.serve(async (req) => {
       continue;
     }
 
-    const growthStage = computeGrowthStage(field.crop_type, field.planted_date, new Date(image.date));
+    const growthStage = computeGrowthStage(field.crop_type, field.planted_date, new Date(image.date), field.maturity_days ?? null);
     const isExpectedSenescence = growthStage?.nearingHarvest === true;
 
     // 4. Cause inference (rainfall thresholds from the design document)
@@ -299,6 +305,18 @@ Deno.serve(async (req) => {
     }
     alertsCreated++;
     results.push(`${field.field_name}: ${isExpectedSenescence ? "EXPECTED RIPENING" : "ALERT"} (${cause}, ${drop}% drop)${noteText}`);
+
+    // Straight to the farmer's notification bar, on every device they
+    // turned notifications on for. Ripening isn't a problem, so no buzz.
+    if (!isExpectedSenescence) {
+      const sent = await notifyFarmer(supabase, field.farmer_id, "alerts", {
+        title: `${field.field_name}: possible ${CAUSE_WORDS[cause] ?? "stress"}`,
+        body: `Crop health dropped ${drop}% below this field's usual level. Tap to see what to do.`,
+        url: "/alerts",
+        tag: `alert-${field.id}`,
+      });
+      if (sent > 0) pushesSent += sent;
+    }
   }
 
   await logEvent("pipeline.run_finished", {
@@ -306,6 +324,7 @@ Deno.serve(async (req) => {
     new_images: newImages,
     failures,
     alerts_created: alertsCreated,
+    notifications_sent: pushesSent,
     duration_ms: Date.now() - started,
   });
 

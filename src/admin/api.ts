@@ -206,5 +206,24 @@ export const adminApi = {
       "activity",
     ),
   health: () => call<Health>("admin_health", {}, "system health"),
+  /** How many events match the filters. Null before patch_012. */
+  auditCount: async (f: AuditFilters): Promise<number | null> => {
+    try {
+      return await call<number>(
+        "admin_audit_count",
+        {
+          p_actor: nul(f.actor),
+          p_actions: f.actions && f.actions.length > 0 ? f.actions : null,
+          p_entity_id: nul(f.entityId),
+          p_search: nul(f.search),
+          p_from: nul(f.from),
+          p_to: nul(f.to),
+        },
+        "the count",
+      );
+    } catch {
+      return null;
+    }
+  },
   alertAccuracy: () => call<AlertAccuracy>("admin_alert_accuracy", {}, "alert accuracy"),
 };

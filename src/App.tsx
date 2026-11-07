@@ -103,7 +103,9 @@ export default function App() {
               <Route path="/account-deleted" element={<AccountDeleted />} />
               <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/terms" element={<TermsOfUse />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
+              {/* Any app page while logged out, including just after logging out:
+                  go to the login page, not the landing page. */}
+              <Route path="*" element={<Navigate to="/login" replace />} />
             </>
           )}
         </Routes>

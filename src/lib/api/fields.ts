@@ -5,7 +5,8 @@ import type { Field } from "../types";
 export async function fetchFields(): Promise<Field[]> {
   const res = await supabase
     .from("fields")
-    .select("id, field_name, crop_type, area_hectares, boundary_coords, planted_date")
+    // "*" so the app keeps working on a database without patch_012's maturity_days.
+    .select("*")
     .order("created_at", { ascending: true });
   const rows = unwrap(res) ?? [];
   // PostgREST sends numeric columns as strings.
@@ -40,6 +41,8 @@ export type NewFieldInput = {
   cropType: string;
   areaHectares: number;
   plantedDate: string | null;
+  /** Only for a crop that isn't on Growell's list. */
+  maturityDays?: number | null;
 };
 
 export async function insertField(input: NewFieldInput): Promise<Field> {
@@ -52,8 +55,10 @@ export async function insertField(input: NewFieldInput): Promise<Field> {
       crop_type: input.cropType,
       area_hectares: input.areaHectares,
       planted_date: input.plantedDate,
+      // Sent only when set, so saving works before patch_012 for listed crops.
+      ...(input.maturityDays ? { maturity_days: input.maturityDays } : {}),
     })
-    .select("id, field_name, crop_type, area_hectares, boundary_coords, planted_date")
+    .select("*")
     .single();
   const row = unwrap(res);
   if (!row) throw new Error("The field was saved but could not be read back. Please refresh.");

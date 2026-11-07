@@ -37,6 +37,7 @@ export const ACTIONS: Record<string, ActionInfo> = {
   "alert.answered": { label: "Alert answered", group: "Alerts", tone: "neutral", Icon: BellIcon },
   "pipeline.check_failed": { label: "Satellite check failed", group: "System", tone: "warn", Icon: WarningIcon },
   "pipeline.run_finished": { label: "Daily check finished", group: "System", tone: "neutral", Icon: SatelliteIcon },
+  "pipeline.weekly_summary": { label: "Weekly report sent", group: "System", tone: "neutral", Icon: BellIcon },
 };
 
 export const ACTION_GROUPS = ["Account", "Sign in", "Fields", "Alerts", "System"].map((group) => ({
@@ -147,6 +148,10 @@ export function eventParts(e: AuditEvent): Part[] {
       return [
         `Daily check finished: ${d.fields_checked ?? 0} fields, ${d.new_images ?? 0} new image${d.new_images === 1 ? "" : "s"}, ${f} failure${f === 1 ? "" : "s"}`,
       ];
+    }
+    case "pipeline.weekly_summary": {
+      const n = Number(d.notifications_sent ?? 0);
+      return [`Weekly field report sent: ${n} notification${n === 1 ? "" : "s"} to ${d.farmers ?? 0} farmer${d.farmers === 1 ? "" : "s"}`];
     }
     default:
       return [actor, ` ${e.action}`, e.entity_name ? ` (${e.entity_name})` : ""];

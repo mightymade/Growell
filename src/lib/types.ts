@@ -5,6 +5,8 @@ export type Field = {
   area_hectares: number | null;
   boundary_coords: GeoJSON.Polygon | null;
   planted_date: string | null;
+  /** Days to harvest, only for a crop that isn't on Growell's list (patch_012). */
+  maturity_days?: number | null;
 };
 
 export type NdviPoint = {

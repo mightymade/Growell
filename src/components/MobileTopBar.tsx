@@ -9,6 +9,7 @@ import { ChevronDownIcon, ChevronLeftIcon, CheckIcon, MoreIcon, PlusIcon, TrashI
 export const SETTINGS_SECTIONS: Record<string, string> = {
   profile: "Profile",
   password: "Password",
+  notifications: "Notifications",
   appearance: "Appearance",
   account: "Account",
 };

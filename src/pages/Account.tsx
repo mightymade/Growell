@@ -12,7 +12,8 @@ import { isPasswordValid } from "../lib/passwordPolicy";
 import { checkAndStartCooldown } from "../lib/rateLimit";
 import Avatar from "../components/Avatar";
 import PasswordRequirements from "../components/PasswordRequirements";
-import { LogoutIcon, CameraIcon, UserIcon, LockIcon, SunIcon, ChevronRightIcon, ShieldIcon } from "../components/icons";
+import { LogoutIcon, CameraIcon, UserIcon, LockIcon, SunIcon, ChevronRightIcon, ShieldIcon, BellIcon } from "../components/icons";
+import NotificationSettings from "../components/NotificationSettings";
 import { useIsAdmin } from "../hooks/useIsAdmin";
 import { downloadMyData } from "../lib/api/export";
 import { clearCache } from "../lib/queryClient";
@@ -27,10 +28,11 @@ const labelClass = "mb-2 block text-sm font-medium text-ink/80 dark:text-parchme
 const primaryButton =
   "h-10 rounded-lg bg-growth-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-growth-700 disabled:opacity-50";
 
-type Section = "profile" | "password" | "appearance" | "account";
+type Section = "profile" | "password" | "notifications" | "appearance" | "account";
 const SECTIONS: Array<{ id: Section; label: string; Icon: (p: { size?: number }) => JSX.Element }> = [
   { id: "profile", label: "Profile", Icon: UserIcon },
   { id: "password", label: "Password", Icon: LockIcon },
+  { id: "notifications", label: "Notifications", Icon: BellIcon },
   { id: "appearance", label: "Appearance", Icon: SunIcon },
   { id: "account", label: "Account", Icon: LogoutIcon },
 ];
@@ -435,6 +437,13 @@ export default function Account() {
                 {passwordSaved && <span role="status" className="m-in text-sm text-growth-700 dark:text-growth-500">Password updated</span>}
               </div>
             </form>
+          )}
+
+          {section === "notifications" && (
+            <div>
+              <PanelHeading title="Notifications" note="Get alerts about your fields in your phone's or computer's notification bar." />
+              <NotificationSettings />
+            </div>
           )}
 
           {section === "appearance" && (

@@ -18,7 +18,7 @@ const HEALTH_CHIP: Record<string, string> = {
  * opens the field.
  */
 export default function FieldListRow({ row, onOpen }: { row: FieldRow; onOpen: (id: string) => void }) {
-  const stage = computeGrowthStage(row.crop_type, row.planted_date);
+  const stage = computeGrowthStage(row.crop_type, row.planted_date, new Date(), row.maturity_days ?? null);
   const word = row.latestNdvi !== null ? healthWord(row.latestNdvi) : null;
   const pct =
     stage?.fractionOfSeason != null ? Math.round(Math.min(1, Math.max(0, stage.fractionOfSeason)) * 100) : null;

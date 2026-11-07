@@ -109,7 +109,7 @@ export default function GrowthStageCard({ field, onUpdated }: Props) {
     );
   }
 
-  const stage = computeGrowthStage(field.crop_type, field.planted_date);
+  const stage = computeGrowthStage(field.crop_type, field.planted_date, new Date(), field.maturity_days ?? null);
   if (!stage) return null;
 
   return (
@@ -143,10 +143,14 @@ export default function GrowthStageCard({ field, onUpdated }: Props) {
           )}
         </>
       ) : (
-        <p className="mt-1 text-sm text-ink/70 dark:text-parchment/70">
-          {field.crop_type} is a perennial crop, planted {stage.daysSincePlanting} days ago. No fixed harvest date
-          to track against.
-        </p>
+        <>
+          <p className="mt-1 text-sm font-medium text-ink dark:text-parchment">{stage.stageName}</p>
+          <p className="mt-1 text-sm text-ink/70 dark:text-parchment/70">
+            {stage.perennial
+              ? `${field.crop_type} keeps producing, so there's no single harvest date. Planted ${stage.daysSincePlanting} days ago.`
+              : `Planted ${stage.daysSincePlanting} days ago. Growell doesn't know how long ${field.crop_type ?? "this crop"} takes to mature.`}
+          </p>
+        </>
       )}
     </div>
   );

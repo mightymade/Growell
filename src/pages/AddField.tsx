@@ -9,16 +9,23 @@ import { supabase } from "../lib/supabase";
 import { insertField } from "../lib/api/fields";
 import { MIN_RELIABLE_HECTARES } from "../lib/fieldSize";
 import FieldBoundaryMap, { type BoundaryResult } from "../components/FieldBoundaryMap";
-import Select from "../components/Select";
 import DatePicker from "../components/DatePicker";
+import CropPicker, { type CropChoice } from "../components/CropPicker";
 
-const CROP_TYPES = ["Maize", "Beans", "Cassava", "Coffee", "Banana", "Groundnuts", "Rice", "Other"];
+/** Today's date where the farmer is (not in UTC), as YYYY-MM-DD. */
+function localToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 export default function AddField() {
   const navigate = useNavigate();
   const [fieldName, setFieldName] = useState("");
-  const [cropType, setCropType] = useState(CROP_TYPES[0]);
-  const [plantedDate, setPlantedDate] = useState("");
+  const [crop, setCrop] = useState<CropChoice>(null);
+  const [customDays, setCustomDays] = useState("");
+  const [cropMissing, setCropMissing] = useState(false);
+  // Most fields are added on the day they're planted; it can be changed.
+  const [plantedDate, setPlantedDate] = useState(localToday);
   const [boundary, setBoundary] = useState<BoundaryResult | null>(null);
   const [saving, setSaving] = useState(false);
   const [savingLabel, setSavingLabel] = useState("Saving…");
@@ -31,6 +38,16 @@ export default function AddField() {
   async function handleSave() {
     if (!fieldName.trim()) {
       setError("Give the field a name, for example \"North plot\" or \"Field A\".");
+      return;
+    }
+    if (!crop) {
+      setCropMissing(true);
+      setError("Choose the crop. Start typing its name, for example maize, then pick it from the list.");
+      return;
+    }
+    const days = customDays.trim() ? Number(customDays) : null;
+    if (crop.custom && days !== null && (!Number.isInteger(days) || days < 7 || days > 3650)) {
+      setError("Days to harvest should be a whole number between 7 and 3650, or left empty.");
       return;
     }
     if (!boundary) {
@@ -55,9 +72,10 @@ export default function AddField() {
         farmerId: user.id,
         fieldName: fieldName.trim(),
         boundary: boundary.geojson,
-        cropType,
+        cropType: crop.name,
         areaHectares: boundary.areaHectares,
         plantedDate: plantedDate || null,
+        maturityDays: crop.custom ? days : null,
       });
       // Load the 90-day history in the background and go straight to the
       // new field. Waiting here for Sentinel Hub could take a long time;
@@ -75,8 +93,31 @@ export default function AddField() {
   const inputClass =
     "w-full rounded-lg border border-canopy-900/15 dark:border-white/15 bg-parchment/40 dark:bg-white/5 px-4 py-3 text-base text-ink dark:text-parchment focus:border-growth-500 focus:bg-white dark:focus:bg-night-950 focus:outline-none focus:ring-2 focus:ring-growth-100 dark:focus:ring-growth-700/40";
 
+  const customDaysInput = (
+    <div>
+      <label htmlFor="add-field-days" className="mb-1 block text-sm font-medium text-ink dark:text-parchment">
+        Days from planting to harvest <span className="font-normal text-ink/55 dark:text-parchment/55">(optional)</span>
+      </label>
+      <input
+        id="add-field-days"
+        type="number"
+        inputMode="numeric"
+        min={7}
+        max={3650}
+        value={customDays}
+        onChange={(e) => setCustomDays(e.target.value)}
+        placeholder="e.g. 90"
+        className={inputClass}
+      />
+      <p className="mt-1 text-xs text-ink/70 dark:text-parchment/70">
+        {crop?.name} isn't on Growell's list. Add roughly how long it takes so Growell can track its progress.
+      </p>
+    </div>
+  );
+
+
   if (isPhone) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     const nameMissing = !fieldName.trim();
     return (
       <div className="fixed inset-0 flex flex-col bg-night-950">
@@ -145,45 +186,36 @@ export default function AddField() {
                         className={inputClass}
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label htmlFor="add-field-crop" className="mb-1 block text-sm font-medium text-ink dark:text-parchment">
-                          Crop
-                        </label>
-                        {/* The phone's own picker: easier to use than a custom list. */}
-                        <select
-                          id="add-field-crop"
-                          value={cropType}
-                          onChange={(e) => setCropType(e.target.value)}
-                          className={`${inputClass} appearance-none bg-[length:16px] bg-[right_12px_center] bg-no-repeat pr-9`}
-                          style={{
-                            backgroundImage:
-                              "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='m4 6 4 4 4-4' stroke='%2316241C' stroke-opacity='.65' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E\")",
-                          }}
-                        >
-                          {CROP_TYPES.map((c) => (
-                            <option key={c} value={c}>
-                              {c}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label htmlFor="add-field-planted" className="mb-1 block text-sm font-medium text-ink dark:text-parchment">
-                          Planted on
-                        </label>
-                        <input
-                          id="add-field-planted"
-                          type="date"
-                          max={today}
-                          value={plantedDate}
-                          onChange={(e) => setPlantedDate(e.target.value)}
-                          className={inputClass}
-                        />
-                      </div>
+                    <div>
+                      <label htmlFor="add-field-crop" className="mb-1 block text-sm font-medium text-ink dark:text-parchment">
+                        Crop
+                      </label>
+                      <CropPicker
+                        value={crop}
+                        onChange={(v) => {
+                          setCrop(v);
+                          if (v) setCropMissing(false);
+                        }}
+                        inputClassName={inputClass}
+                        invalid={cropMissing}
+                      />
+                    </div>
+                    {crop?.custom && customDaysInput}
+                    <div>
+                      <label htmlFor="add-field-planted" className="mb-1 block text-sm font-medium text-ink dark:text-parchment">
+                        Planted on
+                      </label>
+                      <input
+                        id="add-field-planted"
+                        type="date"
+                        max={today}
+                        value={plantedDate}
+                        onChange={(e) => setPlantedDate(e.target.value)}
+                        className={inputClass}
+                      />
                     </div>
                     <p className="text-sm text-ink/70 dark:text-parchment/70">
-                      Planting date is optional. Adding it stops Growell mistaking ripening crops for a problem.
+                      Set to today. Change it if you planted earlier, so Growell can track the crop's progress.
                     </p>
                     {boundary.areaHectares < MIN_RELIABLE_HECTARES && (
                       <p className="rounded-lg bg-sky-100 px-3 py-2 text-sm text-sky-700">
@@ -256,20 +288,24 @@ export default function AddField() {
             />
           </div>
           <div>
-            <label id="crop-type-label" className="mb-1 block text-sm font-medium text-ink dark:text-parchment">Crop type</label>
-            <Select options={CROP_TYPES} value={cropType} onChange={setCropType} labelledBy="crop-type-label" />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-ink dark:text-parchment">Planting date (optional)</label>
-            <DatePicker
-              value={plantedDate}
-              onChange={setPlantedDate}
-              max={new Date().toISOString().slice(0, 10)}
-              placeholder="Not set"
+            <label className="mb-1 block text-sm font-medium text-ink dark:text-parchment">Crop</label>
+            <CropPicker
+              value={crop}
+              onChange={(v) => {
+                setCrop(v);
+                if (v) setCropMissing(false);
+              }}
+              inputClassName={inputClass}
+              invalid={cropMissing}
             />
+          </div>
+          {crop?.custom && customDaysInput}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-ink dark:text-parchment">Planting date</label>
+            <DatePicker value={plantedDate} onChange={setPlantedDate} max={localToday()} placeholder="Not set" />
             <p className="mt-1 text-xs text-ink/70 dark:text-parchment/70">
-              Crops look less green as they ripen. Adding the planting date stops Growell mistaking that for a
-              problem. Add it if you know it.
+              Set to today. Change it if you planted earlier. Growell uses it to track the crop's progress, and so it
+              doesn't mistake ripening for a problem.
             </p>
           </div>
 

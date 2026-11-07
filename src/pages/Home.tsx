@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import PushPrompt from "../components/PushPrompt";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import { useAllFieldAlerts } from "../hooks/useAllFieldAlerts";
 import { useFieldSnapshots } from "../hooks/useFieldSnapshots";
@@ -91,6 +92,8 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {fields.length > 0 && <PushPrompt />}
 
       {fields.length === 0 ? (
         <div className="rounded-xl border border-dashed border-canopy-900/20 dark:border-white/20 bg-white dark:bg-night-900 p-10 text-center">

@@ -9,6 +9,7 @@ export type FieldRow = {
   crop_type: string | null;
   area_hectares: number | null;
   planted_date: string | null;
+  maturity_days?: number | null;
   latestNdvi: number | null;
   prevNdvi: number | null;
   lastImage: string | null;
@@ -53,8 +54,8 @@ function Growth({ row, stage }: { row: FieldRow; stage: GrowthStage | null }) {
   if (stage.fractionOfSeason === null || !stage.daysToMaturity) {
     return (
       <div>
-        <p className="text-xs font-semibold text-growth-700">Perennial crop</p>
-        <p className="text-xs text-ink/70 dark:text-parchment/70">Planted {stage.daysSincePlanting} days ago. No harvest countdown for this crop.</p>
+        <p className="text-xs font-semibold text-growth-700">{stage.perennial ? "Perennial crop" : "No harvest time"}</p>
+        <p className="text-xs text-ink/70 dark:text-parchment/70">{stage.stageName}. Planted {stage.daysSincePlanting} days ago.</p>
       </div>
     );
   }
@@ -117,7 +118,7 @@ export default function FieldsOverview({ rows, onOpen }: { rows: FieldRow[]; onO
 
       <div className="m-stagger divide-y divide-canopy-900/5 dark:divide-white/5">
         {rows.map((r) => {
-          const stage = computeGrowthStage(r.crop_type, r.planted_date);
+          const stage = computeGrowthStage(r.crop_type, r.planted_date, new Date(), r.maturity_days ?? null);
           return (
             <button
               key={r.id}

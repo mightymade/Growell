@@ -17,7 +17,7 @@ export async function requestPasswordReset(email: string): Promise<void> {
   if (error) throw toFriendlyError(error);
 }
 
-export type SignUpInput = { email: string; password: string; name: string };
+export type SignUpInput = { email: string; password: string; name: string; phone?: string; location?: string };
 export type SignUpResult = { userId: string; needsConfirmation: boolean };
 
 export async function signUp(input: SignUpInput): Promise<SignUpResult> {
@@ -26,7 +26,17 @@ export async function signUp(input: SignUpInput): Promise<SignUpResult> {
     password: input.password,
     // The Terms version and time are saved with the account, so the
     // agreement is on record even before the email is confirmed.
-    options: { data: { name: input.name.trim(), terms_version: TERMS_VERSION, terms_accepted_at: new Date().toISOString() } },
+    // Phone and location go with the account too, so they are saved even
+    // when the email has to be confirmed first (patch_012 copies them).
+    options: {
+      data: {
+        name: input.name.trim(),
+        phone: input.phone?.trim() || null,
+        location: input.location?.trim() || null,
+        terms_version: TERMS_VERSION,
+        terms_accepted_at: new Date().toISOString(),
+      },
+    },
   });
   if (error) throw toFriendlyError(error);
   if (!data.user) throw toFriendlyError(null, "Something went wrong creating your account. Please try again.");

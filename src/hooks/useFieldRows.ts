@@ -19,6 +19,7 @@ export function useFieldRows(fields: Field[]) {
         crop_type: f.crop_type,
         area_hectares: f.area_hectares,
         planted_date: f.planted_date,
+        maturity_days: f.maturity_days ?? null,
         latestNdvi: snap?.latestNdvi[f.id] ?? null,
         prevNdvi: snap?.prevNdvi[f.id] ?? null,
         lastImage: snap?.lastPassByField[f.id] ?? null,

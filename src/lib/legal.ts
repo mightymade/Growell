@@ -5,7 +5,7 @@
  * new date: everyone is asked to accept once more on their next visit.
  */
 export const TERMS_VERSION = "2026-11-01";
-export const LEGAL_UPDATED = "1 November 2026";
+export const LEGAL_UPDATED = "7 November 2026";
 export const OPERATOR = "Made Humphrey";
 export const OPERATOR_ROLE = "a final-year student at Uganda Christian University (UCU), Mukono, Uganda";
 export const CONTACT_EMAIL = "humblehumphrey14@gmail.com";

@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { signUp } from "../lib/api/auth";
 import { updateProfile, changeProfilePhoto } from "../lib/api/account";
 import { validateAvatarFile } from "../lib/avatar";
+import { savePendingPhoto } from "../lib/pendingPhoto";
 import { isPasswordValid } from "../lib/passwordPolicy";
 import { checkAndStartCooldown } from "../lib/rateLimit";
 import AuthLayout from "../components/AuthLayout";
@@ -38,6 +39,7 @@ export default function Signup() {
   const [avatarError, setAvatarError] = useState<string | null>(null);
 
   const [agreed, setAgreed] = useState(false);
+  const [photoKept, setPhotoKept] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
@@ -92,9 +94,12 @@ export default function Signup() {
     setLoading(true);
     setError(null);
     try {
-      const result = await signUp({ email, password, name });
+      const result = await signUp({ email, password, name, phone, location });
 
       if (result.needsConfirmation) {
+        // No session until the email is confirmed, so storage can't take the
+        // photo yet. Keep it on this device and upload it at first login.
+        if (avatarFile) setPhotoKept(await savePendingPhoto(email, avatarFile));
         setAwaitingConfirmation(true);
         return;
       }
@@ -107,7 +112,8 @@ export default function Signup() {
         try {
           await changeProfilePhoto(avatarFile, result.userId);
         } catch {
-          // Silently skip — profile/phone/location still get saved below.
+          // Try again at the next login instead of losing it.
+          await savePendingPhoto(email, avatarFile);
         }
       }
       await updateProfile(result.userId, { name, phone, location });
@@ -126,7 +132,10 @@ export default function Signup() {
           <h1 className={auth.heading}>Check your email</h1>
           <p className={`${auth.subtitle} leading-relaxed`}>
             We sent a confirmation link to {email}. Open it, then come back and log in.
-            {avatarFile && " Add your profile photo from Settings once you're in. It couldn't upload before your account was confirmed."}
+            {avatarFile &&
+              (photoKept
+                ? " Your photo will be added the first time you log in on this device."
+                : " Add your profile photo from Settings once you're in.")}
           </p>
           <Link
             to="/login"

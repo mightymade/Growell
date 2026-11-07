@@ -57,6 +57,11 @@ const sections: Section[] = [
               "Recorded automatically while you use Growell.",
             ],
             [
+              "Notification settings, and an address for each device you turn notifications on for",
+              "To send alerts and the weekly report to your phone's or computer's notification bar.",
+              "No. Notifications are off until you turn them on, and you can turn them off at any time.",
+            ],
+            [
               "Your record of agreeing to these terms: which version and when",
               "To show that you agreed, as the law requires.",
               "Recorded when you agree.",
@@ -125,6 +130,11 @@ const sections: Section[] = [
             ["Open-Meteo", "The centre point of your fields, but not your name or email.", "It provides weather and forecasts."],
             ["Esri", "Your internet address and the map area you look at.", "It provides the satellite map pictures."],
             ["Google Fonts", "Your internet address.", "It provides the font the app uses."],
+            [
+              "Your browser's notification service (Google, Apple or Mozilla)",
+              "Notifications for your device. They are encrypted, so the service can't read them.",
+              "It delivers notifications to your notification bar, if you turn them on.",
+            ],
           ]}
         />
         <p>

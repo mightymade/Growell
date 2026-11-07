@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useIsPhone } from "../../hooks/useIsPhone";
 import { adminApi, type AuditFilters } from "../api";
 import { ACTION_GROUPS, describeText, actionInfo } from "../events";
-import { EventList } from "../EventList";
+import { FitEventList } from "../EventList";
 import { downloadCsv, fullDate, todayStamp } from "../format";
-import { EmptyState, ErrorState, InfoTip, LoadMore, PageHeader, ScrollCard, SearchBox, btnGhost, btnSecondary, card, inputClass, useUrlState } from "../ui";
+import { EmptyState, ErrorState, InfoTip, PageHeader, SearchBox, btnGhost, btnSecondary, card, inputClass, useUrlState } from "../ui";
 import Select from "../../components/Select";
 import { Skeleton, LoadingRegion } from "../../components/Skeleton";
 import { BusyLabel } from "../../components/Busy";
@@ -51,17 +52,35 @@ export default function ActivityPage() {
   const filters: AuditFilters = { actor: user || null, actions, search, from: dates.from, to: dates.to };
   const anyFilter = !!(user || actions.length || search || range);
 
-  const q = useInfiniteQuery({
-    queryKey: ["admin", "audit", "list", filters],
-    queryFn: ({ pageParam }) => adminApi.audit(filters, pageParam, 50),
-    initialPageParam: null as { time: string; id: number } | null,
-    getNextPageParam: (last) => {
-      if (!last.has_more || last.rows.length === 0) return undefined;
-      const r = last.rows[last.rows.length - 1];
-      return { time: r.occurred_at, id: r.id };
-    },
+  // Pages: each page starts right after the last event the previous page
+  // showed. We remember where each page started, so Previous goes back
+  // exactly. How many events a page holds depends on how many fit on screen.
+  const filterKey = JSON.stringify(filters);
+  const [pages, setPages] = useState<{ cursor: { time: string; id: number } | null; offset: number }[]>([{ cursor: null, offset: 0 }]);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    setPages([{ cursor: null, offset: 0 }]);
+    setPageIndex(0);
+  }, [filterKey]);
+  const page = pages[pageIndex] ?? pages[0];
+  const isPhone = useIsPhone();
+
+  const q = useQuery({
+    queryKey: ["admin", "audit", "page", filterKey, page.cursor?.id ?? 0, page.cursor?.time ?? ""],
+    queryFn: () => adminApi.audit(filters, page.cursor, isPhone ? 20 : 40),
+    placeholderData: keepPreviousData,
   });
-  const events = useMemo(() => q.data?.pages.flatMap((p) => p.rows) ?? [], [q.data]);
+  const events = useMemo(() => q.data?.rows ?? [], [q.data]);
+  const total = useQuery({ queryKey: ["admin", "audit", "count", filterKey], queryFn: () => adminApi.auditCount(filters) });
+  const hasNext = shown < events.length || !!q.data?.has_more;
+
+  function next() {
+    const last = events[shown - 1];
+    if (!last) return;
+    setPages((ps) => [...ps.slice(0, pageIndex + 1), { cursor: { time: last.occurred_at, id: last.id }, offset: page.offset + shown }]);
+    setPageIndex((i) => i + 1);
+  }
 
   const overview = useQuery({ queryKey: ["admin", "overview"], queryFn: adminApi.overview });
   const logStarted = overview.data?.log_started ?? null;
@@ -170,10 +189,11 @@ export default function ActivityPage() {
           />
         </div>
       ) : (
-        <ScrollCard
-          title="Newest first"
-          className="tall:grow tall:basis-0"
-          actions={
+        <section aria-labelledby="activity-list-title" className={`${card} flex min-h-0 flex-col overflow-hidden tall:grow tall:basis-0 ${q.isPlaceholderData ? "opacity-60 transition-opacity" : ""}`}>
+          <div className="flex shrink-0 items-center justify-between gap-2 px-4 pb-1 pt-4 md:px-6 tall:px-4">
+            <h2 id="activity-list-title" className="text-base font-semibold text-ink dark:text-parchment">
+              Newest first
+            </h2>
             <InfoTip
               align="right"
               label="About this list"
@@ -183,11 +203,25 @@ export default function ActivityPage() {
                   : "Nothing in this list can be changed or deleted."
               }
             />
-          }
-        >
-          <EventList events={events} />
-          <LoadMore hasMore={!!q.hasNextPage} loading={q.isFetchingNextPage} onLoad={() => q.fetchNextPage()} />
-        </ScrollCard>
+          </div>
+          <FitEventList events={events} onFit={setShown} />
+          <div className="flex shrink-0 flex-col items-center justify-between gap-3 border-t border-canopy-900/5 px-4 py-3 dark:border-white/5 md:flex-row">
+            <p className="text-sm text-ink/70 dark:text-parchment/70" aria-live="polite">
+              {shown > 0 &&
+                `Showing ${(page.offset + 1).toLocaleString("en-GB")} to ${(page.offset + shown).toLocaleString("en-GB")}${
+                  total.data !== undefined && total.data !== null ? ` of ${total.data.toLocaleString("en-GB")}` : ""
+                } events`}
+            </p>
+            <div className="flex gap-2">
+              <button type="button" className={btnSecondary} disabled={pageIndex === 0 || q.isFetching} onClick={() => setPageIndex((i) => Math.max(0, i - 1))}>
+                Previous
+              </button>
+              <button type="button" className={btnSecondary} disabled={!hasNext || q.isFetching} onClick={next}>
+                Next
+              </button>
+            </div>
+          </div>
+        </section>
       )}
     </div>
   );

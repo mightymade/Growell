@@ -119,7 +119,7 @@ growell/
 In the Supabase SQL Editor, run these files in this order:
 
 1. `supabase/schema.sql`
-2. `supabase/patch_001_anomaly_update_policy.sql` through `supabase/patch_011_legal_security_accuracy.sql`, one at a time, in number order
+2. `supabase/patch_001_anomaly_update_policy.sql` through `supabase/patch_012_notifications_crops_signup.sql`, one at a time, in number order
 
 To make an account admin (it then sees the admin section at `/admin`), run:
 
@@ -149,7 +149,20 @@ npx supabase functions deploy daily-pipeline --no-verify-jwt --project-ref YOUR_
 npx supabase functions deploy backfill-field --no-verify-jwt --project-ref YOUR_PROJECT_REF
 npx supabase functions deploy field-frame --no-verify-jwt --project-ref YOUR_PROJECT_REF
 npx supabase functions deploy delete-account --no-verify-jwt --project-ref YOUR_PROJECT_REF
+npx supabase functions deploy notify --no-verify-jwt --project-ref YOUR_PROJECT_REF
 ```
+
+### Notifications (alerts and the weekly report)
+
+Growell sends alerts and a Monday field report to the phone's or computer's notification bar (Web Push, no app store needed).
+
+1. Make a key pair: `npx web-push generate-vapid-keys`
+2. Give it to the functions:
+   `npx supabase secrets set VAPID_PUBLIC_KEY=... VAPID_PRIVATE_KEY=... VAPID_SUBJECT=mailto:you@example.com --project-ref YOUR_PROJECT_REF`
+3. Redeploy `daily-pipeline` and deploy `notify`.
+4. Schedule the weekly report with the SQL at the bottom of `supabase/patch_012_notifications_crops_signup.sql`.
+
+Farmers turn notifications on in Settings, Notifications. On iPhone and iPad it works once Growell is added to the Home Screen (iOS 16.4 or newer).
 
 For the "account deleted" confirmation email, add two secrets: `GMAIL_USER` (the Gmail address that sends it) and `GMAIL_APP_PASSWORD` (a Google app password for it, made under Google Account, Security, 2-Step Verification, App passwords). Without them, accounts are still deleted and the confirmation shows on screen.
 
