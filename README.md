@@ -14,6 +14,10 @@ Growell uses free Sentinel-2 satellite imagery to track the health of each field
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3-06B6D4?logo=tailwindcss&logoColor=white)
 ![Supabase](https://img.shields.io/badge/Supabase-Postgres_%7C_Auth_%7C_Edge_Functions-3FCF8E?logo=supabase&logoColor=white)
 
+**[Open the live app](https://growell-ug.vercel.app)**
+
+<img src="docs/screenshots/landing.webp" alt="Growell landing page: See your crops' health from space" width="100%" />
+
 </div>
 
 ---
@@ -22,21 +26,39 @@ Growell uses free Sentinel-2 satellite imagery to track the health of each field
 
 Growell is the final-year project **"A Web-Based System Using Satellite Imagery for Automated Crop Health Monitoring and Anomaly Detection"** by Made Humphrey at Uganda Christian University.
 
-Many smallholder farmers only notice crop stress once it is visible on the ground, when it is often too late to act cheaply. Satellites see stress earlier, through changes in how plants reflect light. Growell turns that satellite data into something a farmer can read at a glance: a health word (Poor, Fair, Good, Very good), a season timelapse of the field, and an alert when something changes.
+Many smallholder farmers only notice crop stress once it is visible on the ground, when it is often too late to act cheaply. Satellites see stress earlier, through changes in how plants reflect light. Growell turns that satellite data into something a farmer can read at a glance: a health word (Poor, Fair, Good, Very good), a colour map of the field, and an alert when something changes.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/home.webp" alt="Home: every field's growth stage and crop health" /><br /><b>Home.</b> Every field's growth stage and crop health, the farming year, and alerts.</td>
+    <td width="50%"><img src="docs/screenshots/field.webp" alt="Field page: satellite map, crop health chart, rain and forecast" /><br /><b>Field.</b> Crop health on the satellite map, the health and rain charts, weather and the 5-day forecast, all on one screen.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/add-field.webp" alt="Add a field: draw the boundary on the map" /><br /><b>Add a field.</b> Draw the boundary on the satellite map, choose the crop and the planting date.</td>
+    <td width="50%"><img src="docs/screenshots/login.webp" alt="Login page" /><br /><b>Log in.</b> Email login with confirmation, password reset, Privacy Policy and Terms.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/admin-overview.webp" alt="Admin overview: users, fields, charts, alert accuracy, latest activity" /><br /><b>Admin overview.</b> Users, fields, activity charts, alert accuracy and the daily check's status.</td>
+    <td width="50%"><img src="docs/screenshots/admin-activity.webp" alt="Admin activity: audit trail with filters and paging" /><br /><b>Admin activity.</b> A tamper-proof audit trail of what every user did, with filters and CSV export.</td>
+  </tr>
+</table>
 
 ## Features
 
 **Fields**
-- Draw a field's boundary on a satellite map and save it with its crop type and planting date
+- Draw a field's boundary on a satellite map and save it with its crop and planting date (today by default)
+- Crop search covering 73 crops grown in Uganda, including local names (type "kasooli" to find maize), each with its typical time to harvest
 - Area in hectares is worked out automatically from the drawn shape
 - 90 days of satellite and weather history load as soon as a field is saved, so charts are never empty
 
 **Crop health**
 - NDVI (Normalised Difference Vegetation Index) from Sentinel-2, clipped to the field boundary, with clouds and shadows masked out
-- Season timelapse: the field's crop health shown as a colour layer on the map, with a play button and a slider to move through the season
+- Crop health map: the latest clear image shown as a colour layer over the field on a sharp satellite photo
 - Crop health chart over time with Poor, Fair, Good and Very good bands
 - Weekly rainfall chart, latest weather, and a 5-day forecast
-- Growth stage tracking from the planting date
+- Growth stage tracking from the planting date and the crop's time to harvest, including perennial crops such as coffee and matooke
 
 **Alerts**
 - A daily server job checks every field, whether or not anyone logs in
@@ -44,12 +66,23 @@ Many smallholder farmers only notice crop stress once it is visible on the groun
 - Each alert names a likely cause (dry spell, too much rain, or possible pests or disease) and a suggested action
 - In-app notification bell, live pop-up alerts, and an Alerts page where farmers confirm whether an alert was accurate
 - Each field is also checked for new images once per login, with automatic retries
+- Notifications in the phone's or computer's notification bar for new alerts, plus a weekly field report every Monday (Web Push, no app store needed)
 
 **Accounts and app**
 - Email sign-up and login with email confirmation and password reset
 - Profile photo, account deactivation, and automatic sign-out after 20 minutes of inactivity
 - Light and dark mode, a layout that works on phones, tablets and computers, and support for keyboard and screen readers
 - Data is cached in the browser, so the last loaded view still shows when the connection drops
+
+**Admin**
+- Overview of users, fields, activity, alert accuracy and the daily check's health
+- Users and fields (as a table or a map), each with its own detail page
+- An audit trail of every account, login, field and alert event that nobody can edit or delete
+- Read-only: admin rights are checked by the database on every request
+
+**Privacy**
+- Privacy Policy and Terms of Use written for Uganda's Data Protection and Privacy Act, 2019, with consent recorded at sign-up
+- Farmers can download all their data, and delete their account and data themselves at any time
 
 ## How it works
 
@@ -66,11 +99,13 @@ The daily pipeline (`supabase/functions/daily-pipeline`) runs six steps for ever
 3. **Anomaly detection.** Compare the new NDVI reading with the average of the field's last 30 readings. A drop of more than 15% is an anomaly.
 4. **Cause inference.** Use recent rainfall to suggest a likely cause: under 3 mm points to a dry spell, over 12 mm to waterlogging, anything in between to possible pests or disease.
 5. **Recommendation.** Pick a practical next step for that cause.
-6. **Alert generation.** Save the alert, which reaches the farmer's browser in real time.
+6. **Alert generation.** Save the alert, which reaches the farmer's browser in real time and their notification bar.
 
 Two more functions support the app:
 - **`backfill-field`** loads 90 days of history for a new field, and is also used for the once-per-login check. It never creates alerts for past dates.
-- **`field-frame`** builds the cloud-free crop health picture of a field for each date in the season timelapse, and caches it in storage.
+- **`field-frame`** builds the cloud-free crop health picture of a field for its latest image, and caches it in storage.
+- **`notify`** sends the weekly field report, and test notifications from Settings.
+- **`delete-account`** deletes a farmer's account and all their data when they ask.
 
 ## Tech stack
 
@@ -93,12 +128,12 @@ growell/
 ├── public/                  Logo, images and crop photos
 ├── src/
 │   ├── pages/               Landing, Login, Signup, Home, FieldDetail, AddField, AlertsPage, Account
-│   ├── components/          Layout, sidebar, charts, map timelapse, alerts, dialogs, form controls
+│   ├── components/          Layout, sidebar, charts, crop health map, alerts, dialogs, form controls
 │   ├── hooks/               Data loading, live alerts, theme, idle sign-out, online status
 │   └── lib/                 Supabase client, API calls, NDVI colours, crop stages, helpers
 ├── supabase/
 │   ├── schema.sql           Tables, row level security and functions
-│   ├── patch_001 … 009.sql  Database updates, run in order after schema.sql
+│   ├── patch_001 … 013.sql  Database updates, run in order after schema.sql
 │   ├── seed.sql             Optional demo data
 │   ├── email-templates/     Sign-up and password reset emails
 │   ├── SENTINEL_SETUP.md    How to get the satellite data keys
@@ -119,7 +154,7 @@ growell/
 In the Supabase SQL Editor, run these files in this order:
 
 1. `supabase/schema.sql`
-2. `supabase/patch_001_anomaly_update_policy.sql` through `supabase/patch_012_notifications_crops_signup.sql`, one at a time, in number order
+2. `supabase/patch_001_anomaly_update_policy.sql` through `supabase/patch_013_admin_active_users_fix.sql`, one at a time, in number order
 
 To make an account admin (it then sees the admin section at `/admin`), run:
 
