@@ -266,7 +266,8 @@ Before a real public launch, check whether Growell must register with the Person
 
 ## Author
 
-**Made Humphrey**
+**Made Humphrey**<br />
 Uganda Christian University
 
-Final-year project. All rights reserved.
+Final-year project, 2026.<br />
+© 2026 Made Humphrey. All rights reserved.
