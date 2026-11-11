@@ -19,26 +19,29 @@ export default function GrowthStageCard({ field, onUpdated }: Props) {
   const [date, setDate] = useState("");
   const queryClient = useQueryClient();
 
-  const mutation = useMutation<void, Error, string, { previous?: Field[] }>({
+  const mutation = useMutation<void, Error, string, { previous?: Field[]; oldDate: string | null }>({
     mutationFn: (newDate) => updatePlantedDate(field.id, newDate),
     // Optimistic: the growth bar updates from the new date immediately.
     // "fields" backs every screen that shows this field, so all of them
     // reflect the change at once; a failure restores the old list.
     onMutate: async (newDate) => {
+      // Taken BEFORE the optimistic update below. Read later, the field
+      // already shows the new date, so it would be compared with itself.
+      const oldDate = field.planted_date ?? null;
       await queryClient.cancelQueries({ queryKey: ["fields"] });
       const previous = queryClient.getQueryData<Field[]>(["fields"]);
       queryClient.setQueryData<Field[]>(["fields"], (old) =>
         old ? old.map((f) => (f.id === field.id ? { ...f, planted_date: newDate } : f)) : old,
       );
-      return { previous };
+      return { previous, oldDate };
     },
     onError: (_err, _vars, context) => {
       if (context?.previous) queryClient.setQueryData(["fields"], context.previous);
     },
-    onSuccess: (_data, newDate) => {
+    onSuccess: (_data, newDate, context) => {
       setEditing(false);
       // Planted earlier than the history Growell has: fetch the missing part.
-      if (needsOlderHistory(newDate, field.planted_date)) startBackfill(field.id);
+      if (needsOlderHistory(newDate, context?.oldDate ?? null)) startBackfill(field.id);
       onUpdated();
     },
   });

@@ -1,5 +1,5 @@
-// Returns one NDVI picture of a field for one date, for the season
-// timelapse. The picture covers ONLY the field (everything outside the
+// Returns one NDVI picture of a field for one date, for the crop health
+// layer on the field map. The picture covers ONLY the field (everything outside the
 // boundary is transparent) and is coloured from bare-soil brown to dense
 // green, so the web app can lay it softly over the sharp map photo.
 //
@@ -15,7 +15,8 @@
 // Needs:  supabase/patch_008_field_frames_bucket.sql run once.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getAccessToken } from "../_shared/sentinel.ts";
+import { getAccessToken, SCL_ALWAYS_EXCLUDE, SCL_RELAXED_FOR_SMALL_FIELDS } from "../_shared/sentinel.ts";
+import { MIN_RELIABLE_HECTARES } from "../_shared/fieldSize.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -32,10 +33,13 @@ function json(body: unknown, status = 200) {
 
 // NDVI per pixel, coloured on a soft ramp.
 // KEEP IN SYNC with src/lib/ndviColor.ts (the legend uses the same stops).
-// Pixels outside the field, and cloud, shadow or snow pixels (SCL 3, 8,
-// 9, 10, 11), are transparent. SCL is a class code, and smooth
-// upsampling blends it at pixel edges, so it is rounded before checking.
-const EVALSCRIPT = `
+// Pixels outside the field, and the same pixels the crop health reading
+// ignores (see fetchNdviTimeSeries in _shared/sentinel.ts), are
+// transparent. The two MUST use the same list: when this picture also hid
+// "cloud shadow" on a small field but the reading kept it, a field could
+// have a reading and a completely empty picture. SCL is a class code, and
+// smooth upsampling blends it at pixel edges, so it is rounded first.
+const frameScript = (masked: number[]) => `
 //VERSION=3
 function setup() {
   return { input: ["B04", "B08", "SCL", "dataMask"], output: { bands: 4 } };
@@ -48,7 +52,7 @@ const ramp = new ColorRampVisualizer([
   [0.65, 0x3FA34D],
   [0.8, 0x1E7B3A],
 ]);
-const MASKED = [3, 8, 9, 10, 11];
+const MASKED = [${masked.join(", ")}];
 function evaluatePixel(s) {
   const sum = s.B08 + s.B04;
   const ndvi = sum === 0 ? 0 : (s.B08 - s.B04) / sum;
@@ -83,7 +87,7 @@ Deno.serve(async (req) => {
   const asUser = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
     global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
   });
-  const { data: field } = await asUser.from("fields").select("id, boundary_coords").eq("id", fieldId).maybeSingle();
+  const { data: field } = await asUser.from("fields").select("id, boundary_coords, area_hectares").eq("id", fieldId).maybeSingle();
   if (!field?.boundary_coords) return json({ error: "Field not found" }, 404);
 
   const { data: reading } = await asUser
@@ -108,7 +112,9 @@ Deno.serve(async (req) => {
 
   // Cached copy first.
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const path = `${fieldId}/ndvi-${date}.png`;
+  // "v2": pictures saved before the masking fix may be blank, so they are
+  // not reused.
+  const path = `${fieldId}/ndvi-v2-${date}.png`;
   const cached = await admin.storage.from(BUCKET).download(path);
   if (cached.data) {
     const bytes = new Uint8Array(await cached.data.arrayBuffer());
@@ -146,7 +152,11 @@ Deno.serve(async (req) => {
           ],
         },
         output: { width, height, responses: [{ identifier: "default", format: { type: "image/png" } }] },
-        evalscript: EVALSCRIPT,
+        evalscript: frameScript(
+          field.area_hectares != null && Number(field.area_hectares) < MIN_RELIABLE_HECTARES
+            ? SCL_ALWAYS_EXCLUDE
+            : [...SCL_ALWAYS_EXCLUDE, ...SCL_RELAXED_FOR_SMALL_FIELDS],
+        ),
       }),
     });
     if (!res.ok) return json({ error: `Sentinel Hub image request failed (${res.status}): ${await res.text()}` }, 502);

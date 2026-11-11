@@ -130,18 +130,16 @@ export default function FieldDetail() {
     return count;
   }, [weatherHistory]);
 
-  // The period both stacked charts cover, up to today. It starts at the
-  // earliest record, but no further back than 90 days, or a week before
-  // planting when that is earlier (up to a year). If the only clear image
-  // is older than that, the chart reaches back to show it.
+  // The period both stacked charts cover, up to today: this season, from
+  // a week before planting (up to a year back). With no planting date, the
+  // last 90 days. If the newest clear image is older than that, the chart
+  // reaches back to show it, so it is never empty when an image exists.
   const plantedDate = selectedField?.planted_date ?? null;
   const chartRange = useMemo<ChartRange>(() => {
     const today = isoDay(new Date());
-    let cutoff = isoDay(new Date(Date.now() - 90 * 86_400_000));
-    if (plantedDate) {
-      const weekBefore = isoDay(new Date(new Date(`${plantedDate}T00:00:00Z`).getTime() - 7 * 86_400_000));
-      if (weekBefore < cutoff) cutoff = weekBefore;
-    }
+    let cutoff = plantedDate
+      ? isoDay(new Date(new Date(`${plantedDate}T00:00:00Z`).getTime() - 7 * 86_400_000))
+      : isoDay(new Date(Date.now() - 90 * 86_400_000));
     const yearAgo = isoDay(new Date(Date.now() - 365 * 86_400_000));
     if (cutoff < yearAgo) cutoff = yearAgo;
     const latestNdvi = ndviHistory[ndviHistory.length - 1]?.capture_date?.slice(0, 10);
