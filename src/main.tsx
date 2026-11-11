@@ -6,6 +6,10 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { queryClient, persistOptions } from "./lib/queryClient";
 import "./index.css";
 import { registerServiceWorker } from "./lib/push";
+import { watchForNewVersion } from "./lib/newVersion";
+
+// An open tab that missed an update reloads itself instead of crashing.
+watchForNewVersion();
 
 // Shows notifications from Growell in the notification bar (see public/sw.js).
 registerServiceWorker();

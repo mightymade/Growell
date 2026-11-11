@@ -1,5 +1,7 @@
 import { Component, type ReactNode } from "react";
 import { clearCache } from "../lib/queryClient";
+import { isOldVersionError, reloadForNewVersion } from "../lib/newVersion";
+import Splash from "../pages/Splash";
 
 /** The calm screen shown instead of a blank page if something crashes. */
 export function ErrorFallback({ onReload }: { onReload: () => void }) {
@@ -21,7 +23,8 @@ export function ErrorFallback({ onReload }: { onReload: () => void }) {
   );
 }
 
-type State = { failed: boolean };
+/** updating: the crash was this tab missing a new version, and it is reloading. */
+type State = { failed: boolean; updating: boolean };
 
 /**
  * Catches a crash anywhere below it. Reloading also clears the saved copy
@@ -29,13 +32,19 @@ type State = { failed: boolean };
  * that keeps happening on every load.
  */
 export default class ErrorBoundary extends Component<{ children: ReactNode }, State> {
-  state: State = { failed: false };
+  state: State = { failed: false, updating: false };
 
-  static getDerivedStateFromError(): State {
-    return { failed: true };
+  static getDerivedStateFromError(error: unknown): State {
+    return { failed: true, updating: isOldVersionError(error) };
   }
 
   componentDidCatch(error: unknown) {
+    if (isOldVersionError(error)) {
+      console.info("A new version of Growell is live. Reloading to get it.");
+      // Reloaded very recently already: it is a real outage, so show the message.
+      if (!reloadForNewVersion()) this.setState({ updating: false });
+      return;
+    }
     console.error("Growell crashed:", error);
   }
 
@@ -45,6 +54,7 @@ export default class ErrorBoundary extends Component<{ children: ReactNode }, St
   };
 
   render() {
+    if (this.state.failed && this.state.updating) return <Splash />;
     return this.state.failed ? <ErrorFallback onReload={this.reload} /> : this.props.children;
   }
 }
