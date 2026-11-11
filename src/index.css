@@ -505,3 +505,24 @@ body {
   .lp-float { animation: none; }
   .lp-wait, .lp-wait-lg, .lp-draw { opacity: 1; transform: none; transition: none; }
 }
+
+/* Loading screen (pages/Splash.tsx): a soft fade in, and a bar that slides across. */
+@keyframes splash-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.splash-in {
+  animation: splash-in 200ms ease-out both;
+}
+@keyframes splash-bar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+.splash-bar {
+  animation: splash-bar 1100ms cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .splash-in { animation: none; }
+  /* No sliding: a still bar in the middle still says "loading". */
+  .splash-bar { animation: none; transform: translateX(100%); }
+}
