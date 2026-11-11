@@ -14,6 +14,10 @@ type Props = {
   areaHectares?: number | null;
   /** Marked on the chart, so readings before and after planting are easy to tell apart. */
   plantedDate?: string | null;
+  /** What the last automatic check found, shown when there is no reading. */
+  lastCheck?: { message: string; failed: boolean; at: string } | null;
+  /** True while a check is running. */
+  checking?: boolean;
   /** Shared with the rain chart, so dates line up when they are stacked. */
   range: ChartRange;
 };
@@ -29,7 +33,7 @@ const BAND_LABELS: Record<number, string> = { 0.1: "Poor", 0.3: "Fair", 0.5: "Go
  * Very good bands instead of raw scores. Drops Growell alerted on are
  * marked with an orange dot.
  */
-export default function NdviChart({ data, anomalyDates = [], areaHectares = null, plantedDate = null, range }: Props) {
+export default function NdviChart({ data, anomalyDates = [], areaHectares = null, plantedDate = null, lastCheck = null, checking = false, range }: Props) {
   const animate = useAnimateOnce();
   const { isDark } = useTheme();
   const c = chartColors(isDark);
@@ -111,9 +115,19 @@ export default function NdviChart({ data, anomalyDates = [], areaHectares = null
         <div className="flex flex-1 flex-col items-center justify-center gap-1 px-6 py-10 text-center text-sm text-ink/70 dark:text-parchment/70">
           <p className="font-medium text-ink dark:text-parchment">No clear satellite image yet</p>
           <p className="max-w-xs">
-            The satellite passes every 2 to 5 days and cloudy passes are skipped. Tap "Check for new images" at the top to look
-            again.
+            Growell looks for new images by itself every day. The satellite passes every 2 to 5 days, and passes that are cloudy over
+            your field are skipped.
           </p>
+          {checking ? (
+            <p className="mt-2 max-w-xs text-sky-700 dark:text-sky-100">Checking for images now…</p>
+          ) : (
+            lastCheck && (
+              <p className={`mt-2 max-w-xs ${lastCheck.failed ? "text-laterite-700 dark:text-laterite-600" : ""}`}>
+                <span className="font-medium">Last check, {checkTime(lastCheck.at)}:</span> {lastCheck.message}
+                {lastCheck.failed && " Growell will try again."}
+              </p>
+            )
+          )}
           {isSmallField && (
             <p className="mt-2 max-w-xs">This field is small, so its readings will be marked rough when they arrive.</p>
           )}
@@ -223,4 +237,12 @@ export default function NdviChart({ data, anomalyDates = [], areaHectares = null
       )}
     </section>
   );
+}
+
+function checkTime(iso: string) {
+  const d = new Date(iso);
+  const sameDay = d.toDateString() === new Date().toDateString();
+  return sameDay
+    ? d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+    : d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }

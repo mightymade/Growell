@@ -12,7 +12,7 @@ import ForecastStrip from "../components/ForecastStrip";
 import GrowthStageCard from "../components/GrowthStageCard";
 import FieldAlertHistory from "../components/FieldAlertHistory";
 import { Skeleton, ChartCardSkeleton, FieldGlanceSkeleton } from "../components/Skeleton";
-import { useBackfillStatus } from "../hooks/useBackfillStatus";
+import { useBackfillStatus, useLastCheck } from "../hooks/useBackfillStatus";
 import { AUTO_CHECK_MIN_AGE_DAYS, needsAutoCheck, runAutoCheck } from "../lib/autoCheck";
 import BrandMark from "../components/BrandMark";
 import { WifiOffIcon } from "../components/icons";
@@ -83,6 +83,7 @@ export default function FieldDetail() {
   const { ndviHistory, weatherHistory, weather, alerts, problems, error: detailError, loading: detailLoading, refetch } =
     useFieldDetail(fieldId ?? null);
   const backfilling = useBackfillStatus(fieldId ?? null);
+  const lastCheck = useLastCheck(fieldId ?? null);
   // Skeleton while loading, and also while a brand-new field's history is
   // still being downloaded (otherwise the charts would claim "no imagery").
   const showSkeleton = detailLoading || (backfilling && ndviHistory.length === 0);
@@ -269,6 +270,8 @@ export default function FieldDetail() {
                       anomalyDates={anomalyDates}
                       areaHectares={selectedField.area_hectares}
                       plantedDate={selectedField.planted_date}
+                      lastCheck={lastCheck ?? null}
+                      checking={autoChecking || backfilling}
                       range={chartRange}
                     />
                   </div>

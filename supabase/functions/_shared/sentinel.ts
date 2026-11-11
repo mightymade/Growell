@@ -65,6 +65,19 @@ export const SCL_ALWAYS_EXCLUDE = [0, 1, 8, 9, 10];
 // exchange for getting a reading most of the time instead of never.
 export const SCL_RELAXED_FOR_SMALL_FIELDS = [3, 6, 7];
 
+/**
+ * Two bands per pixel inside the field:
+ *   B0 = NDVI if the pixel is clear, else 0
+ *   B1 = 1 if the pixel is clear, else 0
+ * Cloud is NOT put in dataMask. dataMask only drops pixels with no
+ * satellite data. That matters because the API also counts the pixels
+ * outside the field (the rest of its bounding box) as "no data": when
+ * cloud lived in dataMask too, a slanted or thin field always looked
+ * more than 40% cloudy, even on a clear day, and never got a reading.
+ * Now, over the field's own pixels:
+ *   share that is clear = mean(B1)
+ *   NDVI of the clear part = mean(B0) / mean(B1)
+ */
 export function buildEvalscript(badSclClasses: number[]): string {
   return `
 //VERSION=3
@@ -72,16 +85,17 @@ function setup() {
   return {
     input: [{ bands: ["B04", "B08", "SCL", "dataMask"] }],
     output: [
-      { id: "data", bands: 1 },
+      { id: "data", bands: 2 },
       { id: "dataMask", bands: 1 }
     ]
   };
 }
 function evaluatePixel(samples) {
-  let ndvi = (samples.B08 - samples.B04) / (samples.B08 + samples.B04);
-  let validNdvi = (samples.B08 + samples.B04) === 0 ? 0 : 1;
-  let badScl = [${badSclClasses.join(", ")}].indexOf(samples.SCL) !== -1 ? 1 : 0;
-  return { data: [ndvi], dataMask: [samples.dataMask * validNdvi * (1 - badScl)] };
+  let sum = samples.B08 + samples.B04;
+  let validNdvi = sum === 0 ? 0 : 1;
+  let ndvi = validNdvi ? (samples.B08 - samples.B04) / sum : 0;
+  let clear = [${badSclClasses.join(", ")}].indexOf(samples.SCL) !== -1 ? 0 : 1;
+  return { data: [ndvi * clear, clear], dataMask: [samples.dataMask * validNdvi] };
 }
 `;
 }
@@ -178,27 +192,30 @@ export function parseStatisticalResponse(json: { data?: unknown[] }): { readings
       continue;
     }
 
-    const stats = interval?.outputs?.data?.bands?.B0?.stats;
-    // sampleCount is ALL pixels inside the boundary. noDataCount is the
-    // part of those that was masked out (cloud, no data). So the usable
-    // pixels are sampleCount - noDataCount, not sampleCount.
-    const sampleCount = Number(stats?.sampleCount ?? 0);
-    const noDataCount = Number(stats?.noDataCount ?? 0);
-    const validCount = sampleCount - noDataCount;
-    if (!stats || sampleCount === 0 || validCount <= 0) {
+    const bands = interval?.outputs?.data?.bands;
+    const ndviStats = bands?.B0?.stats;
+    const clearStats = bands?.B1?.stats;
+    // sampleCount - noDataCount = pixels inside the field that the satellite
+    // actually covered. Pixels outside the field also count as "no data",
+    // which is why cloud is measured from B1 instead (see buildEvalscript).
+    const sampleCount = Number(ndviStats?.sampleCount ?? 0);
+    const noDataCount = Number(ndviStats?.noDataCount ?? 0);
+    const covered = sampleCount - noDataCount;
+    const clearShare = Number(clearStats?.mean);
+    if (!ndviStats || !clearStats || covered <= 0 || !Number.isFinite(clearShare) || clearShare <= 0) {
+      // No pixels at all, or every pixel was cloud.
       skipped.push({ date, reason: "no_samples", sampleCount, noDataCount });
       continue;
     }
 
-    // JSON has no NaN, so the API sends the text "NaN". Number.isNaN("NaN")
-    // is false, so the old check let that text through as a reading.
-    const mean = Number(stats.mean);
+    // JSON has no NaN, so the API sends the text "NaN".
+    const mean = Number(ndviStats.mean) / clearShare;
     if (!Number.isFinite(mean)) {
       skipped.push({ date, reason: "nan_mean", sampleCount, noDataCount });
       continue;
     }
 
-    const cloudCoverPct = (noDataCount / sampleCount) * 100;
+    const cloudCoverPct = (1 - clearShare) * 100;
     readings.push({ date, ndvi: mean, cloudCoverPct });
   }
   return { readings, skipped };

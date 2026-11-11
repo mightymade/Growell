@@ -14,12 +14,16 @@ export function startBackfill(fieldId: string) {
   supabase.functions
     .invoke("backfill-field", { body: { field_id: fieldId, full: true } })
     .then(({ data, error }) => {
-      // Logged so a failed first download is visible in the console instead
-      // of silent. Non-fatal: the daily job now repairs fields with no history.
+      // Non-fatal: the daily job repairs fields with no history. The outcome
+      // is kept so the field page can say what happened.
       if (error) console.error("backfill-field failed", error);
       else console.info("backfill-field result", data);
+      recordCheck(fieldId, error ? CANT_REACH : describe(data ?? {}));
     })
-    .catch((err) => console.error("backfill-field failed", err))
+    .catch((err) => {
+      console.error("backfill-field failed", err);
+      recordCheck(fieldId, CANT_REACH);
+    })
     .finally(() => {
       queryClient.setQueryData(["backfill", fieldId], false);
       refreshFarmData();
@@ -37,12 +41,22 @@ export function needsOlderHistory(newDate: string, oldDate: string | null): bool
   return weekBefore < Date.now() - 90 * 86_400_000;
 }
 
+/** What the last check for this field found, in plain words. */
+export type LastCheck = RefreshOutcome & { at: string };
+
+const CANT_REACH: RefreshOutcome = { ok: false, failed: true, message: "Couldn't reach the satellite service." };
+
+function recordCheck(fieldId: string, outcome: RefreshOutcome) {
+  queryClient.setQueryData<LastCheck>(["checkResult", fieldId], { ...outcome, at: new Date().toISOString() });
+}
+
 type BackfillResponse = {
   ndvi_days_found?: number;
   ndvi_days_saved?: number;
   ndvi_too_cloudy?: number;
   ndvi_approximate?: boolean;
   ndvi_older_image?: string | null;
+  ndvi_skipped?: { reason: string }[];
   ndvi_error?: string | null;
   ndvi_save_error?: string | null;
   ndvi_save_warning?: string | null;
@@ -62,11 +76,12 @@ export type RefreshOutcome = { ok: boolean; failed: boolean; message: string };
 /**
  * Pulls the last 90 days again for one field and says what happened in
  * plain words. Safe to run any time: saving is an upsert, so nothing is
- * doubled. This is the "fix it now" button for a field whose first
- * history download failed.
+ * doubled. Runs by itself once per login (lib/autoCheck.ts), which also
+ * repairs a field whose first history download failed.
  */
 export async function refreshFieldData(fieldId: string): Promise<RefreshOutcome> {
   queryClient.setQueryData(["backfill", fieldId], true);
+  let outcome: RefreshOutcome = CANT_REACH;
   try {
     let data: BackfillResponse | null = null;
     let error: unknown = null;
@@ -79,33 +94,60 @@ export async function refreshFieldData(fieldId: string): Promise<RefreshOutcome>
     }
     if (error) {
       console.error(error);
-      return { ok: false, failed: true, message: "Couldn't reach the satellite service." };
+      outcome = await errorOutcome(error);
+      return outcome;
     }
-    const r = data ?? {};
-    console.info("backfill-field result", r);
-    if (r.error) return { ok: false, failed: true, message: r.error };
-    if (r.ndvi_error) return { ok: false, failed: true, message: `Satellite request failed: ${r.ndvi_error}` };
-    if (r.ndvi_save_error) return { ok: false, failed: true, message: `Readings found but not saved: ${r.ndvi_save_error}` };
-
-    const saved = r.ndvi_days_saved ?? 0;
-    const cloudy = r.ndvi_too_cloudy ?? 0;
-    const weather = r.weather_days_saved ?? 0;
-    const parts: string[] = [];
-    if (r.ndvi_older_image) {
-      parts.push(`no clear image in the last 90 days, so the latest clear one (${r.ndvi_older_image}) was saved`);
-    } else if (saved > 0) {
-      parts.push(`${saved} clear image${saved === 1 ? "" : "s"} saved`);
-    } else if (cloudy > 0) {
-      parts.push(`${cloudy} pass${cloudy === 1 ? " was" : "es were"} found, but all too cloudy to use`);
-    } else {
-      parts.push("no satellite passes found in the last 90 days");
-    }
-    if (cloudy > 0 && saved > 0) parts.push(`${cloudy} skipped for cloud`);
-    parts.push(`${weather} days of weather`);
-    if (r.ndvi_approximate) parts.push("readings are approximate because the field is small");
-    return { ok: saved > 0 || weather > 0, failed: false, message: parts.join(", ") + "." };
+    console.info("backfill-field result", data);
+    outcome = describe(data ?? {});
+    return outcome;
   } finally {
+    recordCheck(fieldId, outcome);
     queryClient.setQueryData(["backfill", fieldId], false);
     refreshFarmData();
   }
+}
+
+/** A call that came back with an error status: use the function's own reason when it gave one. */
+async function errorOutcome(error: unknown): Promise<RefreshOutcome> {
+  const res = (error as { context?: Response }).context;
+  if (res && typeof res.json === "function") {
+    try {
+      const body = await res.clone().json();
+      if (body?.error) return { ok: false, failed: true, message: `The check failed: ${body.error}` };
+    } catch {
+      /* not JSON */
+    }
+    if (res.status) return { ok: false, failed: true, message: `The check failed (error ${res.status}).` };
+  }
+  return CANT_REACH;
+}
+
+/** Turns the function's answer into one plain sentence. */
+function describe(r: BackfillResponse): RefreshOutcome {
+  if (r.error) return { ok: false, failed: true, message: r.error };
+  if (r.ndvi_error) return { ok: false, failed: true, message: `The satellite service refused the request: ${r.ndvi_error}` };
+  if (r.ndvi_save_error) return { ok: false, failed: true, message: `Images were found but couldn't be saved: ${r.ndvi_save_error}` };
+
+  const saved = r.ndvi_days_saved ?? 0;
+  const found = r.ndvi_days_found ?? 0;
+  const cloudy = r.ndvi_too_cloudy ?? 0;
+  const empty = r.ndvi_skipped?.length ?? 0;
+  const weather = r.weather_days_saved ?? 0;
+  const parts: string[] = [];
+  if (r.ndvi_older_image) {
+    parts.push(`no clear image in the last 90 days, so the latest clear one (${r.ndvi_older_image}) was saved`);
+  } else if (saved > 0) {
+    parts.push(`${saved} clear image${saved === 1 ? "" : "s"} saved`);
+    if (cloudy > 0) parts.push(`${cloudy} skipped for cloud`);
+  } else if (found > 0) {
+    parts.push(`${found} pass${found === 1 ? " was" : "es were"} found, but ${found === 1 ? "it was" : "all were"} too cloudy over this field`);
+  } else if (empty > 0) {
+    parts.push(`${empty} pass${empty === 1 ? "" : "es"} covered this field, but every pixel was cloud or no data`);
+  } else {
+    parts.push("no satellite passes found for this field");
+  }
+  parts.push(`${weather} days of weather`);
+  if (r.ndvi_approximate) parts.push("readings are approximate because the field is small");
+  const text = parts.join(", ");
+  return { ok: saved > 0 || weather > 0, failed: false, message: text.charAt(0).toUpperCase() + text.slice(1) + "." };
 }
