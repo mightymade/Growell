@@ -57,6 +57,7 @@ type BackfillResponse = {
   ndvi_approximate?: boolean;
   ndvi_older_image?: string | null;
   ndvi_skipped?: { reason: string }[];
+  ndvi_passes?: { date: string; cloud_pct: number }[];
   ndvi_error?: string | null;
   ndvi_save_error?: string | null;
   ndvi_save_warning?: string | null;
@@ -140,7 +141,11 @@ function describe(r: BackfillResponse): RefreshOutcome {
     parts.push(`${saved} clear image${saved === 1 ? "" : "s"} saved`);
     if (cloudy > 0) parts.push(`${cloudy} skipped for cloud`);
   } else if (found > 0) {
-    parts.push(`${found} pass${found === 1 ? " was" : "es were"} found, but ${found === 1 ? "it was" : "all were"} too cloudy over this field`);
+    const clearest = r.ndvi_passes?.length ? Math.min(...r.ndvi_passes.map((p) => p.cloud_pct)) : null;
+    parts.push(
+      `${found} pass${found === 1 ? " was" : "es were"} found, but ${found === 1 ? "it was" : "all were"} too cloudy over this field` +
+        (clearest !== null ? ` (the clearest was ${clearest}% cloud; Growell needs 40% or less)` : ""),
+    );
   } else if (empty > 0) {
     parts.push(`${empty} pass${empty === 1 ? "" : "es"} covered this field, but every pixel was cloud or no data`);
   } else {

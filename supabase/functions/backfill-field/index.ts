@@ -34,6 +34,8 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
+// Shown in every response, so it is easy to confirm which code is deployed.
+const VERSION = "2026-11-11 field-pixel cloud";
 const DAY = 24 * 60 * 60 * 1000;
 const RECENT_DAYS = 90; // the usual window: the last 90 days
 const MAX_DAYS = 365; // never pull more than a year, to protect the satellite quota
@@ -151,7 +153,11 @@ Deno.serve(async (req) => {
   const weatherSave = await saveWeatherReadings(supabase, field.id, weatherReadings);
 
   return json({
+      version: VERSION,
       field: field.field_name,
+      // Every pass found, with how much of the field was cloud. Readings
+      // over CLOUD_COVER_LIMIT are not saved.
+      ndvi_passes: ndviReadings.map((r) => ({ date: r.date, cloud_pct: Math.round(r.cloudCoverPct), ndvi: Math.round(r.ndvi * 100) / 100 })),
       area_hectares: field.area_hectares,
       from: from.toISOString().slice(0, 10),
       // Set when the window had no clear image and an older one was used.
