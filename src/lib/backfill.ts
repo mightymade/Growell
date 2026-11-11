@@ -2,8 +2,9 @@ import { queryClient, refreshFarmData } from "./queryClient";
 import { supabase } from "./supabase";
 
 /**
- * Loads the 90-day satellite and weather history for a new field IN THE
- * BACKGROUND. It used to block the Add Field screen until Sentinel Hub
+ * Loads a field's satellite and weather history IN THE BACKGROUND: the
+ * last 90 days, or back to a week before planting when that is further
+ * (up to a year). Used for a new field and when a planting date moves. It used to block the Add Field screen until Sentinel Hub
  * answered, which could take a long time. Now the farmer goes straight to
  * the new field, sees a "loading history" note, and the charts fill in the
  * moment the history arrives.
@@ -11,7 +12,7 @@ import { supabase } from "./supabase";
 export function startBackfill(fieldId: string) {
   queryClient.setQueryData(["backfill", fieldId], true);
   supabase.functions
-    .invoke("backfill-field", { body: { field_id: fieldId } })
+    .invoke("backfill-field", { body: { field_id: fieldId, full: true } })
     .then(({ data, error }) => {
       // Logged so a failed first download is visible in the console instead
       // of silent. Non-fatal: the daily job now repairs fields with no history.
@@ -25,11 +26,23 @@ export function startBackfill(fieldId: string) {
     });
 }
 
+/**
+ * True when a new planting date means the field needs history from
+ * further back than it has: the week before planting falls outside the
+ * last 90 days, and it is earlier than the old planting date.
+ */
+export function needsOlderHistory(newDate: string, oldDate: string | null): boolean {
+  if (oldDate && newDate >= oldDate) return false;
+  const weekBefore = new Date(`${newDate}T00:00:00Z`).getTime() - 7 * 86_400_000;
+  return weekBefore < Date.now() - 90 * 86_400_000;
+}
+
 type BackfillResponse = {
   ndvi_days_found?: number;
   ndvi_days_saved?: number;
   ndvi_too_cloudy?: number;
   ndvi_approximate?: boolean;
+  ndvi_older_image?: string | null;
   ndvi_error?: string | null;
   ndvi_save_error?: string | null;
   ndvi_save_warning?: string | null;
@@ -78,7 +91,9 @@ export async function refreshFieldData(fieldId: string): Promise<RefreshOutcome>
     const cloudy = r.ndvi_too_cloudy ?? 0;
     const weather = r.weather_days_saved ?? 0;
     const parts: string[] = [];
-    if (saved > 0) {
+    if (r.ndvi_older_image) {
+      parts.push(`no clear image in the last 90 days, so the latest clear one (${r.ndvi_older_image}) was saved`);
+    } else if (saved > 0) {
       parts.push(`${saved} clear image${saved === 1 ? "" : "s"} saved`);
     } else if (cloudy > 0) {
       parts.push(`${cloudy} pass${cloudy === 1 ? " was" : "es were"} found, but all too cloudy to use`);

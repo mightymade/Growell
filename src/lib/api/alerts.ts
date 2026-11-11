@@ -68,7 +68,7 @@ const UNDEFINED_COLUMN = "42703";
 async function fetchNdvi(fieldId: string) {
   const base = () =>
     supabase.from("satellite_images").select("capture_date, ndvi_value, is_approximate").eq("field_id", fieldId);
-  const res = await base().order("capture_date", { ascending: true }).limit(200);
+  const res = await base().order("capture_date", { ascending: true }).limit(400);
   if (res.error?.code !== UNDEFINED_COLUMN) return res;
   // Database not patched yet (patch_006). Load the readings without the
   // is_approximate flag rather than showing nothing at all.
@@ -89,7 +89,8 @@ export async function fetchFieldDetail(fieldId: string): Promise<FieldAlertsResu
       .select("record_date, rainfall_mm, temperature_c, humidity_pct")
       .eq("field_id", fieldId)
       .order("record_date", { ascending: false })
-      .limit(120),
+      // Up to a year, for a field planted long ago.
+      .limit(370),
     supabase
       .from("anomalies")
       .select("id, date_detected, severity, status, alerts(id, message_text, date_sent, viewed_flag)")
@@ -121,7 +122,7 @@ export async function fetchFieldDetail(fieldId: string): Promise<FieldAlertsResu
     .map((r) => ({ ...r, ndvi_value: Number(r.ndvi_value) }))
     // A stored "NaN" from the old parser is not a reading.
     .filter((r) => Number.isFinite(r.ndvi_value));
-  // Newest 120 days, then put back in date order for the charts.
+  // Newest year, then put back in date order for the charts.
   const weatherHistory = (weatherRes.data ?? [])
     .map((r) => ({
       ...r,

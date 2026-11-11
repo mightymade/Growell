@@ -2,6 +2,7 @@ import { BusyLabel } from "./Busy";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { updatePlantedDate } from "../lib/api/fields";
+import { needsOlderHistory, startBackfill } from "../lib/backfill";
 import { computeGrowthStage } from "../lib/cropStages";
 import DatePicker from "./DatePicker";
 import { useIsPhone } from "../hooks/useIsPhone";
@@ -34,8 +35,10 @@ export default function GrowthStageCard({ field, onUpdated }: Props) {
     onError: (_err, _vars, context) => {
       if (context?.previous) queryClient.setQueryData(["fields"], context.previous);
     },
-    onSuccess: () => {
+    onSuccess: (_data, newDate) => {
       setEditing(false);
+      // Planted earlier than the history Growell has: fetch the missing part.
+      if (needsOlderHistory(newDate, field.planted_date)) startBackfill(field.id);
       onUpdated();
     },
   });

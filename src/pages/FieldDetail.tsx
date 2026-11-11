@@ -129,11 +129,22 @@ export default function FieldDetail() {
     return count;
   }, [weatherHistory]);
 
-  // The period both stacked charts cover: from the earliest reading or
-  // weather record in the last 90 days, up to today.
+  // The period both stacked charts cover, up to today. It starts at the
+  // earliest record, but no further back than 90 days, or a week before
+  // planting when that is earlier (up to a year). If the only clear image
+  // is older than that, the chart reaches back to show it.
+  const plantedDate = selectedField?.planted_date ?? null;
   const chartRange = useMemo<ChartRange>(() => {
     const today = isoDay(new Date());
-    const cutoff = isoDay(new Date(Date.now() - 90 * 86_400_000));
+    let cutoff = isoDay(new Date(Date.now() - 90 * 86_400_000));
+    if (plantedDate) {
+      const weekBefore = isoDay(new Date(new Date(`${plantedDate}T00:00:00Z`).getTime() - 7 * 86_400_000));
+      if (weekBefore < cutoff) cutoff = weekBefore;
+    }
+    const yearAgo = isoDay(new Date(Date.now() - 365 * 86_400_000));
+    if (cutoff < yearAgo) cutoff = yearAgo;
+    const latestNdvi = ndviHistory[ndviHistory.length - 1]?.capture_date?.slice(0, 10);
+    if (latestNdvi && latestNdvi < cutoff) cutoff = latestNdvi;
     const firsts = [ndviHistory[0]?.capture_date, weatherHistory[0]?.record_date]
       .filter((d): d is string => !!d)
       .map((d) => (d < cutoff ? cutoff : d.slice(0, 10)));
@@ -142,7 +153,7 @@ export default function FieldDetail() {
     const twoWeeksBack = isoDay(new Date(Date.now() - 14 * 86_400_000));
     if (start > twoWeeksBack) start = twoWeeksBack;
     return { start, end: today };
-  }, [ndviHistory, weatherHistory]);
+  }, [ndviHistory, weatherHistory, plantedDate]);
 
   const centroid = selectedField?.boundary_coords ? polygonCentroid(selectedField.boundary_coords) : null;
   const { forecast, loading: forecastLoading } = useWeatherForecast(centroid?.lat ?? null, centroid?.lon ?? null);
@@ -180,7 +191,7 @@ export default function FieldDetail() {
                 </span>
                 <p className="flex-1">
                   <span className="font-semibold">{selectedField.field_name} is saved.</span> Growell will check it every day and
-                  tell you here if crop health drops. Its last 90 days of history are loading now.
+                  tell you here if crop health drops. Its satellite history is loading now.
                 </p>
                 <button
                   onClick={() => setWelcomeDismissed(true)}
@@ -194,7 +205,7 @@ export default function FieldDetail() {
             {backfilling && !autoChecking && (
               <div className="mb-4 flex items-start gap-3 rounded-lg bg-sky-100 p-3 text-sm text-sky-700">
                 <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-sky-600 motion-safe:animate-pulse" aria-hidden />
-                <p>Loading 90 days of satellite and weather history for this field. The charts will fill in as soon as it arrives.</p>
+                <p>Loading satellite and weather history for this field. The charts will fill in as soon as it arrives.</p>
               </div>
             )}
 
@@ -257,6 +268,7 @@ export default function FieldDetail() {
                       data={ndviHistory}
                       anomalyDates={anomalyDates}
                       areaHectares={selectedField.area_hectares}
+                      plantedDate={selectedField.planted_date}
                       range={chartRange}
                     />
                   </div>

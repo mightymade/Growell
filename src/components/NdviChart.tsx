@@ -12,6 +12,8 @@ type Props = {
   anomalyDates?: string[];
   /** Lets the empty and "rough reading" notes mention small fields. */
   areaHectares?: number | null;
+  /** Marked on the chart, so readings before and after planting are easy to tell apart. */
+  plantedDate?: string | null;
   /** Shared with the rain chart, so dates line up when they are stacked. */
   range: ChartRange;
 };
@@ -27,7 +29,7 @@ const BAND_LABELS: Record<number, string> = { 0.1: "Poor", 0.3: "Fair", 0.5: "Go
  * Very good bands instead of raw scores. Drops Growell alerted on are
  * marked with an orange dot.
  */
-export default function NdviChart({ data, anomalyDates = [], areaHectares = null, range }: Props) {
+export default function NdviChart({ data, anomalyDates = [], areaHectares = null, plantedDate = null, range }: Props) {
   const animate = useAnimateOnce();
   const { isDark } = useTheme();
   const c = chartColors(isDark);
@@ -52,6 +54,10 @@ export default function NdviChart({ data, anomalyDates = [], areaHectares = null
   // The same period as the rain chart below it, so dates line up.
   const domain: [number, number] = [dayTime(range.start), dayTime(range.end)];
   const ticks = insetTicks(domain[0], domain[1], X_TICK_COUNT);
+  const plantedT = plantedDate ? dayTime(plantedDate) : null;
+  const showPlanted = plantedT !== null && plantedT >= domain[0] && plantedT <= domain[1];
+  // The newest clear image was taken before the crop was planted.
+  const latestBeforePlanting = !!latest && !!plantedDate && latest.date < plantedDate;
   const top = Math.max(0.8, Math.ceil(Math.max(0, ...points.map((p) => p.ndvi)) * 10) / 10);
 
   function renderDot(props: any) {
@@ -115,6 +121,12 @@ export default function NdviChart({ data, anomalyDates = [], areaHectares = null
       ) : (
         <>
           <p className="sr-only">{summary}</p>
+          {latestBeforePlanting && (
+            <p className="mt-2 text-xs text-ink/65 dark:text-parchment/65">
+              The latest clear image is from {shortDay(latest.date)}, before planting, so it shows the ground before your crop. The
+              next clear pass will show the crop.
+            </p>
+          )}
           {/* On computers the plot has no height of its own (h-0) and takes
               whatever the card is given, so the page can fit one screen. */}
           <div className="mt-3 h-[220px] lg:h-0 lg:min-h-[160px] lg:grow lg:basis-0" aria-hidden>
@@ -129,6 +141,15 @@ export default function NdviChart({ data, anomalyDates = [], areaHectares = null
                 {BAND_LINES.map((y) => (
                   <ReferenceLine key={y} y={y} stroke={c.grid} strokeWidth={1} />
                 ))}
+                {showPlanted && (
+                  <ReferenceLine
+                    x={plantedT!}
+                    stroke={c.axisText}
+                    strokeDasharray="3 3"
+                    strokeWidth={1}
+                    label={{ value: "Planted", position: "insideTopLeft", fill: c.axisText, fontSize: 12 }}
+                  />
+                )}
                 <XAxis
                   dataKey="t"
                   type="number"

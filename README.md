@@ -51,7 +51,7 @@ Many smallholder farmers only notice crop stress once it is visible on the groun
 - Draw a field's boundary on a satellite map and save it with its crop and planting date (today by default)
 - Crop search covering 73 crops grown in Uganda, including local names (type "kasooli" to find maize), each with its typical time to harvest
 - Area in hectares is worked out automatically from the drawn shape
-- 90 days of satellite and weather history load as soon as a field is saved, so charts are never empty
+- Satellite and weather history load as soon as a field is saved: the last 90 days, or back to a week before planting (up to a year). Moving the planting date earlier fetches the missing part. If there is no clear image in that time, the newest clear one from the past year is shown, so the chart is never empty
 
 **Crop health**
 - NDVI (Normalised Difference Vegetation Index) from Sentinel-2, clipped to the field boundary, with clouds and shadows masked out
@@ -102,7 +102,7 @@ The daily pipeline (`supabase/functions/daily-pipeline`) runs six steps for ever
 6. **Alert generation.** Save the alert, which reaches the farmer's browser in real time and their notification bar.
 
 Two more functions support the app:
-- **`backfill-field`** loads 90 days of history for a new field, and is also used for the once-per-login check. It never creates alerts for past dates.
+- **`backfill-field`** loads a new field's history (90 days, or since a week before planting, up to a year), and is also used for the once-per-login check and when a planting date moves earlier. It never creates alerts for past dates.
 - **`field-frame`** builds the cloud-free crop health picture of a field for its latest image, and caches it in storage.
 - **`notify`** sends the weekly field report, and test notifications from Settings.
 - **`delete-account`** deletes a farmer's account and all their data when they ask.
